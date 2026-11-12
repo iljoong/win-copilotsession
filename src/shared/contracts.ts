@@ -25,6 +25,7 @@ export type ImportContext = {
 };
 export type UsageObservation = Amounts & {
   id: string;
+  sessionKey?: string;
   scope: 'call' | 'invocation' | 'session';
   origin: SourceKind;
   model: string | null;
