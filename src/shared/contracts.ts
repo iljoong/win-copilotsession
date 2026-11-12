@@ -157,6 +157,11 @@ export type SourceStatus = SourceConfig & {
   };
 };
 export type StoreChange = { sessionIds: string[]; sourceIds: string[] };
+export type AppInfo = {
+  dataDirectory: string;
+  defaultCliRoot: string;
+  privacyWarning: string | null;
+};
 export type UsageReport = {
   totals: UsageSummary;
   models: ModelUsage[];
