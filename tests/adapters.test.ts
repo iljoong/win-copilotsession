@@ -74,6 +74,54 @@ test('unknownFieldsRemainUnavailable', () => {
     aic: null,
   });
 });
+test.each([
+  [2_500_000_000, 'complete', 2.5, 'complete'],
+  [0, 'complete', 0, 'complete'],
+  [1_000_000_000, 'partial', 1, 'partial'],
+  [null, 'complete', null, 'unavailable'],
+  [-1, 'complete', null, 'unavailable'],
+  ['1000000000', 'complete', null, 'unavailable'],
+  [1_000_000_000, 'unavailable', null, 'unavailable'],
+])(
+  'CLI nano-AIU %s (%s) preserves reported credit coverage',
+  (nanoAiu, status, aic, coverage) => {
+    const result = parseCliRecord(
+      {
+        type: 'session.usage_record',
+        data: {
+          usage: {
+            cost: 99,
+            aiCreditsStatus: status,
+            copilotUsage: { totalNanoAiu: nanoAiu },
+          },
+        },
+      },
+      context,
+    );
+    expect(
+      result.records.find((record) => record.kind === 'usage')?.usage,
+    ).toMatchObject({ aic, coverage: { aic: coverage } });
+  },
+);
+test('telemetryReadsNanoAiuWithoutTreatingPremiumRequestCostAsCredits', () => {
+  const result = parseTelemetryRecord(
+    {
+      name: 'chat model',
+      spanId: 'call',
+      attributes: {
+        'gen_ai.conversation.id': 'session',
+        'gen_ai.operation.name': 'chat',
+        'github.copilot.nano_aiu': 1_250_000_000,
+        'github.copilot.cost': 99,
+      },
+    },
+    context,
+    'cli',
+  );
+  expect(
+    result.records.find((record) => record.kind === 'usage')?.usage.aic,
+  ).toBe(1.25);
+});
 
 test('snapshotDoesNotMeanCompleted', () => {
   const result = parseVsCodeExport(vscode, {

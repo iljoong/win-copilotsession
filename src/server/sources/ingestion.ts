@@ -28,6 +28,7 @@ type Cursor = {
   prefix: string;
   prefixLength: number;
   modified: number;
+  creditsVersion?: number;
 };
 const hash = (value: string | Buffer) =>
   createHash('sha256').update(value).digest('hex');
@@ -186,7 +187,8 @@ export function createIngestion(options: {
       (cursor.identity !== identity ||
         stat.size < cursor.offset ||
         cursor.prefix !== hash(prefixBuffer) ||
-        (stat.size === cursor.offset && cursor.modified !== stat.mtimeMs))
+        (stat.size === cursor.offset && cursor.modified !== stat.mtimeMs) ||
+        (source.kind === 'cli-history' && cursor.creditsVersion !== 1))
     )
       cursor = null;
     const state: Cursor = cursor ?? {
@@ -197,6 +199,7 @@ export function createIngestion(options: {
       prefix: hash(prefixBuffer),
       prefixLength,
       modified: stat.mtimeMs,
+      creditsVersion: source.kind === 'cli-history' ? 1 : undefined,
     };
     const warnings = [...initialWarnings];
     let chunks = 0;

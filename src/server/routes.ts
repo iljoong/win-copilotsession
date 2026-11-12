@@ -71,9 +71,11 @@ function filterFrom(url: URL): SessionFilter {
     return value;
   };
   const sort = params.get('sort') ?? 'lastActivity';
+  const entryOrder = params.get('entryOrder') ?? 'asc';
   const state = params.get('state') || undefined;
   if (
     !['lastActivity', 'agentTime', 'credits'].includes(sort) ||
+    !['asc', 'desc'].includes(entryOrder) ||
     (state &&
       ![
         'active',
@@ -84,7 +86,7 @@ function filterFrom(url: URL): SessionFilter {
         'unknown',
       ].includes(state))
   )
-    throw new HttpError(400, 'Invalid sort or state.');
+    throw new HttpError(400, 'Invalid sort, state, or conversation order.');
   for (const key of ['query', 'source', 'model'])
     if ((params.get(key)?.length ?? 0) > 1024)
       throw new HttpError(400, 'Query is too long.');
@@ -102,6 +104,8 @@ function filterFrom(url: URL): SessionFilter {
     sort: sort as SessionFilter['sort'],
     state: state as SessionState | undefined,
     query: params.get('query') || undefined,
+    hideEmptyPreviews: params.get('hideEmptyPreviews') === 'true',
+    entryOrder: entryOrder as SessionFilter['entryOrder'],
     source: params.get('source') || undefined,
     model: params.get('model') || undefined,
     from,
@@ -169,7 +173,13 @@ export function createApi(options: {
             send(
               200,
               match[2] === 'entries'
-                ? store.getEntries(match[1], filter.offset, filter.limit)
+                ? store.getEntries(
+                    match[1],
+                    filter.offset,
+                    filter.limit,
+                    filter.hideEmptyPreviews,
+                    filter.entryOrder,
+                  )
                 : store.getActivity(match[1], filter.offset, filter.limit),
             );
           }

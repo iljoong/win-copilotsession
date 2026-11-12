@@ -7,6 +7,16 @@ assistant previews, and monitor observed activity. The session-first workspace
 stacks on narrow screens. Usage views distinguish reported zero, missing data,
 partial coverage, and overlapping sources.
 
+## Documentation and agent handoff
+
+- [AGENTS.md](AGENTS.md): spec-driven development instructions for coding agents.
+- [Repository handoff](docs/handoff.md): architecture, stack, implemented behavior,
+  regression map, current limitations, and desktop implementation handoff.
+- [Approved product design](docs/superpowers/specs/2026-11-12-copilot-session-dashboard-design.md):
+  baseline scope and acceptance boundaries.
+- [Windows desktop research](docs/research/windows-desktop-options-research.md):
+  Electron, WebView2, and native C# comparison. Desktop packaging is not implemented.
+
 ## Run on Windows
 
 Requires Node.js **22.23.4 or newer** and npm. From this folder in PowerShell:
@@ -108,8 +118,12 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
 - **Active (observed)**, idle, completed, interrupted, error, and unknown reflect
   source evidence. Idle and an assistant turn ending are not session completion.
   Imported snapshots are labeled separately.
-- Conversation entries use source-time order, with stable insertion-order ties.
-  Entries without timestamps follow dated entries; their times are not guessed.
+- Conversation entries default to descending source-time order (newest first);
+  choose ascending for oldest first. Timestamp ties follow insertion order in
+  the selected direction. Undated entries stay last; their times are not guessed.
+  Empty assistant previews are hidden by default before pagination, with 25 entries
+  per page by default and 50, 100, or 150 available. Down/up buttons beside the page
+  size select descending/ascending order.
 - Activity is observed events and counts, not a percent-complete estimate or a
   guarantee that a tool is currently running. Source time, dashboard observation
   time, connection status, and observations older than 30 seconds are visible.
@@ -117,8 +131,13 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
   is written**, not after an operation starts. Upstream exporters may flush only
   completed spans. Large history catch-up is bounded and may take longer.
 - Credits are reported **AIC only**, never dollars or guessed conversions.
-  CLI credit conversion remains unverified. Missing values are not zero.
-  Unidentified import snapshots are excluded from combined totals.
+  CLI history `copilotUsage.totalNanoAiu` and telemetry
+  `github.copilot.nano_aiu` use the documented conversion of 10^9 nano AIU per
+  AI credit. Premium-request `cost` is not converted into credits. Enabled CLI
+  history sources replay legacy checkpoints once to fill missing credits without
+  duplicating records; original logs must still be readable. Missing values are
+  not zero, and partial totals stay labeled. Unidentified import snapshots are
+  excluded from combined totals.
 - Model filters select matching **whole sessions**, including their other models.
   Model/source tables are descriptive, not model quality or efficiency rankings.
   Cache and reasoning tokens are subsets, not extra tokens added to input/output.
@@ -174,7 +193,7 @@ processes, and removes only its own temporary directories.
 - VS Code 1.146.0 export shapes were checked against first-party source at commit `69047191fc427f2f92828279aae1d90d8eeda7ab`, `src/vs/workbench/contrib/chat/common/model/chatModel.ts`. Fixture contents are synthetic. A real user-selected export from this installation has not yet been validated.
 - VS Code telemetry file spans follow the first-party `microsoft/vscode-copilot-chat` file exporter (`src/platform/otel/node/fileExporters.ts`) and official monitoring documentation. Fixtures are synthetic, not a live capture.
 - Exported completed spans do not guarantee visibility into a tool currently running. Live exporter timing remains unmeasured.
-- CLI billing fields such as `cost` and `totalNanoAiu` are not treated as AIC without a verified mapping. VS Code snapshot `copilotCredits` can be displayed as partial per-request reported credits, but unidentified snapshots are excluded from combined totals.
+- CLI `copilotUsage.totalNanoAiu` and telemetry `github.copilot.nano_aiu` use the verified nano-AIU conversion described above; premium-request `cost` is not AIC. VS Code snapshot `copilotCredits` can be displayed as partial per-request reported credits, but unidentified snapshots are excluded from combined totals.
 
 Source documentation:
 

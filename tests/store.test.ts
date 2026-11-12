@@ -140,6 +140,41 @@ test('lateHistoryIsChronologicalAndSearchOffsetsUseTheSameOrder', () => {
   ).toEqual(['prompt', 'answer']);
   expect(session.matchedEntryOffset).toBe(0);
 });
+test('conversationSortRunsBeforePaginationAndSearchOffsets', () => {
+  const store = open();
+  store.commitBatch({
+    records: [
+      entry({ kind: 'session', eventId: 'start', title: 'Conversation title' }),
+      entry({ eventId: 'old', text: 'old needle', timestamp: 100 }),
+      entry({ eventId: 'prompt', timestamp: 200 }),
+      entry({ eventId: 'answer', role: 'assistant-preview', timestamp: 200 }),
+      entry({
+        eventId: 'empty',
+        role: 'assistant-preview',
+        text: ' \n ',
+        timestamp: 300,
+      }),
+      entry({ eventId: 'undated', timestamp: null }),
+    ],
+    warnings: [],
+  });
+  const session = store.listSessions({
+    ...filter,
+    query: 'needle',
+    hideEmptyPreviews: true,
+    entryOrder: 'desc',
+  }).items[0];
+  expect(session.matchedEntryOffset).toBe(2);
+  expect(
+    store.getEntries(session.id, 0, 2, true, 'desc').items.map((row) => row.id),
+  ).toEqual(['answer', 'prompt']);
+  expect(
+    store.getEntries(session.id, 2, 2, true, 'desc').items.map((row) => row.id),
+  ).toEqual(['old', 'undated']);
+  expect(
+    store.getEntries(session.id, 0, 50, true, 'asc').items.map((row) => row.id),
+  ).toEqual(['old', 'prompt', 'answer', 'undated']);
+});
 test('searchPreservesOriginalCrlfAndWhitespace', () => {
   const store = open();
   const text = '\r\n  café e\u0301 😀\r\n';

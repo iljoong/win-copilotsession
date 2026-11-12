@@ -84,6 +84,8 @@ export type Page<T> = {
 };
 export type SessionFilter = {
   query?: string;
+  hideEmptyPreviews?: boolean;
+  entryOrder?: 'asc' | 'desc';
   source?: string;
   state?: SessionState;
   model?: string;

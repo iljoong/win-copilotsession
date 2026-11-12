@@ -87,6 +87,181 @@ test('searchOpensMatchingPromptBeyondFirstPage', async () => {
     await screen.findByText('needle in a later prompt'),
   ).toBeInTheDocument();
 });
+test('conversationDefaultsToNewestFirstAndSortChangesResetPagination', async () => {
+  const user = userEvent.setup();
+  harness.store.commitBatch({
+    records: Array.from({ length: 33 }, (_, n) =>
+      harness.entry('one', `Prompt ${n}`, {
+        eventId: `p${n}`,
+        timestamp: 1000 + n,
+      }),
+    ),
+    warnings: [],
+  });
+  render(<SessionsPage />);
+  const descending = await screen.findByRole('button', {
+    name: 'Descending (newest first)',
+  });
+  const firstText = () =>
+    screen.getAllByRole('article')[0].querySelector('pre')?.textContent;
+  expect(descending).toHaveAttribute('aria-pressed', 'true');
+  await waitFor(() => expect(firstText()).toBe('Prompt 32'));
+  await user.click(
+    within(
+      screen.getByRole('navigation', { name: 'Conversation pages' }),
+    ).getByRole('button', { name: 'Next' }),
+  );
+  await waitFor(() => expect(firstText()).toBe('Prompt 7'));
+  const ascending = screen.getByRole('button', {
+    name: 'Ascending (oldest first)',
+  });
+  await user.click(ascending);
+  expect(ascending).toHaveAttribute('aria-pressed', 'true');
+  expect(descending).toHaveAttribute('aria-pressed', 'false');
+  await waitFor(() => expect(firstText()).toBe('Prompt 0'));
+  await user.click(
+    within(
+      screen.getByRole('navigation', { name: 'Conversation pages' }),
+    ).getByRole('button', { name: 'Next' }),
+  );
+  await waitFor(() => expect(firstText()).toBe('Prompt 25'));
+});
+test('conversationPageSizeCountsVisibleEntriesAndResetsOnChanges', async () => {
+  const user = userEvent.setup();
+  harness.store.commitBatch({
+    records: Array.from({ length: 160 }, (_, n) => [
+      harness.entry('one', `Prompt ${n}`, { eventId: `p${n}` }),
+      harness.entry(
+        'one',
+        n % 2 ? `Answer ${n}` : n % 4 ? ' \n\t\u00a0 ' : '',
+        { eventId: `a${n}`, role: 'assistant-preview' },
+      ),
+    ]).flat(),
+    warnings: [],
+  });
+  render(<SessionsPage />);
+  const size = await screen.findByRole('combobox', {
+    name: 'Entries per page',
+  });
+  const toggle = screen.getByRole('checkbox', {
+    name: 'Hide empty assistant previews',
+  });
+  const pages = () =>
+    within(screen.getByRole('navigation', { name: 'Conversation pages' }));
+  expect(size).toHaveValue('25');
+  expect(toggle).toBeChecked();
+  await waitFor(() => {
+    expect(pages().getByText('1–25 of 240')).toBeInTheDocument();
+    expect(screen.getAllByRole('article')).toHaveLength(25);
+  });
+  for (const preview of document.querySelectorAll('.assistant-entry pre'))
+    expect(preview.textContent?.trim()).not.toBe('');
+  await user.click(pages().getByRole('button', { name: 'Next' }));
+  await waitFor(() =>
+    expect(pages().getByText('26–50 of 240')).toBeInTheDocument(),
+  );
+  for (const count of [50, 100, 150]) {
+    await user.selectOptions(size, String(count));
+    await waitFor(() => {
+      expect(pages().getByText(`1–${count} of 240`)).toBeInTheDocument();
+      expect(screen.getAllByRole('article')).toHaveLength(count);
+    });
+  }
+  await user.click(pages().getByRole('button', { name: 'Next' }));
+  await waitFor(() => {
+    expect(pages().getByText('151–240 of 240')).toBeInTheDocument();
+    expect(screen.getAllByRole('article')).toHaveLength(90);
+  });
+  expect(pages().getByRole('button', { name: 'Next' })).toBeDisabled();
+  expect(
+    within(screen.getByRole('region', { name: 'Conversation' })).getByText(
+      'Prompt 0',
+      { exact: true },
+    ),
+  ).toBeInTheDocument();
+  await user.click(toggle);
+  await waitFor(() => {
+    expect(pages().getByText('1–150 of 320')).toBeInTheDocument();
+    expect(screen.getAllByRole('article')).toHaveLength(150);
+  });
+});
+test('filteredSearchOffsetsFollowTheSelectedConversationPageSize', async () => {
+  const user = userEvent.setup();
+  harness.store.commitBatch({
+    records: [
+      ...Array.from({ length: 60 }, (_, n) =>
+        harness.entry('one', ' \n ', {
+          eventId: `a${n}`,
+          role: 'assistant-preview',
+        }),
+      ),
+      ...Array.from({ length: 31 }, (_, n) =>
+        harness.entry('one', n === 30 ? 'filtered needle' : `Prompt ${n}`, {
+          eventId: `p${n}`,
+        }),
+      ),
+    ],
+    warnings: [],
+  });
+  render(<SessionsPage />);
+  await user.click(
+    await screen.findByRole('button', {
+      name: 'Ascending (oldest first)',
+    }),
+  );
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Search original prompts' }),
+    'needle',
+  );
+  const pages = () =>
+    screen.getByRole('navigation', { name: 'Conversation pages' });
+  await waitFor(() => {
+    expect(screen.getByText('filtered needle')).toBeInTheDocument();
+    expect(pages()).toHaveTextContent('26–31 of 31');
+  });
+  await user.selectOptions(
+    screen.getByRole('combobox', { name: 'Entries per page' }),
+    '50',
+  );
+  await waitFor(() => {
+    expect(screen.getByText('filtered needle')).toBeInTheDocument();
+    expect(pages()).toHaveTextContent('1–31 of 31');
+  });
+  await user.click(
+    screen.getByRole('checkbox', { name: 'Hide empty assistant previews' }),
+  );
+  await waitFor(() => {
+    expect(screen.getByText('filtered needle')).toBeInTheDocument();
+    expect(pages()).toHaveTextContent('51–91 of 91');
+  });
+});
+test('hidingAllBlankPreviewsKeepsDisplayControlsAvailable', async () => {
+  const user = userEvent.setup();
+  harness.store.commitBatch({
+    records: [harness.entry('one', ' \n\t ', { role: 'assistant-preview' })],
+    warnings: [],
+  });
+  render(<SessionsPage />);
+  const toggle = await screen.findByRole('checkbox', {
+    name: 'Hide empty assistant previews',
+  });
+  expect(toggle).toBeChecked();
+  expect(
+    await screen.findByText(
+      'No conversation entries match these display settings.',
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryAllByRole('article')).toHaveLength(0);
+  expect(
+    within(
+      screen.getByRole('navigation', { name: 'Conversation pages' }),
+    ).getByRole('button', { name: 'Next' }),
+  ).toBeDisabled();
+  await user.click(toggle);
+  expect(
+    await screen.findByRole('article', { name: 'Assistant preview 1' }),
+  ).toBeInTheDocument();
+});
 test('snapshotAndIdleAreNotCompleted', async () => {
   const base = harness.entry('one', 'Idle conversation');
   harness.store.commitBatch({
@@ -116,11 +291,12 @@ test('multiModelSessionShowsBreakdown', async () => {
     warnings: [],
   });
   render(<SessionsPage />);
-  await screen.findByRole('article', { name: 'Original prompt 1' });
+  await screen.findByRole('article', { name: /^Original prompt/ });
   expect(screen.getAllByText(/model-a/).length).toBeGreaterThan(0);
   expect(screen.getAllByText(/model-b/).length).toBeGreaterThan(0);
 });
 test('activityShowsSourceTimeAndFreshness', async () => {
+  const user = userEvent.setup();
   const base = harness.entry('one', 'Prompt');
   harness.store.commitBatch({
     records: [
@@ -144,9 +320,15 @@ test('activityShowsSourceTimeAndFreshness', async () => {
     warnings: [],
   });
   render(<SessionsPage />);
-  expect(await screen.findByText('Tool completed')).toBeInTheDocument();
+  const event = await screen.findByText('Tool completed');
+  expect(event).not.toBeVisible();
+  const toggle = screen.getByText('Observed activity');
+  await user.click(toggle);
+  expect(event).toBeVisible();
   expect(screen.getByText(/Observation stale/)).toBeInTheDocument();
   expect(screen.getByText(/Source time/)).toBeInTheDocument();
+  await user.click(toggle);
+  expect(event).not.toBeVisible();
 });
 test('olderSelectionResponseCannotOverwriteNewSelection', async () => {
   const user = userEvent.setup();

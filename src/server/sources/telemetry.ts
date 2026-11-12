@@ -4,7 +4,7 @@ import type {
   RecordBase,
   RecordContext,
 } from '../../shared/contracts.js';
-import { amounts, number, object, text } from './values.js';
+import { amounts, creditsFromNanoAiu, number, object, text } from './values.js';
 import { toAssistantPreview } from './vscode.js';
 
 function spanTime(value: unknown): number | null {
@@ -113,6 +113,7 @@ export function parseTelemetryRecord(
               a['gen_ai.usage.cache_write.input_tokens'],
           ),
           reasoning: number(a['gen_ai.usage.reasoning.output_tokens']),
+          aic: creditsFromNanoAiu(a['github.copilot.nano_aiu']),
         }),
         id,
         model,
@@ -170,7 +171,7 @@ export function parseTelemetryRecord(
     records,
     warnings: [
       'Telemetry is observed after export; running status and live response streaming are not guaranteed.',
-      'Captured model input is not indexed as original user prompts. Billing-unit mapping has not been verified.',
+      'Captured model input is not indexed as original user prompts. Premium-request cost is not treated as AI credits.',
       'Telemetry schema is source-checked; live delivery from this installation has not been measured.',
     ],
   };

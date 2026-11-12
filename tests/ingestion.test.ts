@@ -2,12 +2,14 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { openStore, type Store } from '../src/server/data/store.js';
 import {
   createIngestion,
   type IngestionService,
 } from '../src/server/sources/ingestion.js';
 import { readJsonlChunk } from '../src/server/sources/jsonl.js';
+import { parseCliRecord } from '../src/server/sources/cli.js';
 
 let root: string;
 let store: Store;
@@ -173,6 +175,119 @@ test('newCliSessionIsDiscovered', async () => {
   );
   await ingestion.scanNow();
   expect(store.listSessions({ ...filter, query: 'New session' }).total).toBe(1);
+});
+test('legacyCliCheckpointBackfillsCreditsWithoutDuplicatingOrRefreshingHistory', async () => {
+  const history = join(root, 'history');
+  const directory = join(history, 'session');
+  await fs.mkdir(directory, { recursive: true });
+  const file = join(directory, 'events.jsonl');
+  const prompt = {
+    id: 'prompt',
+    type: 'user.message',
+    timestamp: 1000,
+    data: { content: 'Preserved original prompt' },
+  };
+  const usage = {
+    id: 'usage',
+    type: 'session.usage_record',
+    timestamp: 2000,
+    data: {
+      usage: {
+        apiCallId: 'call',
+        inputTokens: 100,
+        outputTokens: 10,
+        duration: 100,
+        aiCreditsStatus: 'complete',
+        copilotUsage: { totalNanoAiu: 2_500_000_000 },
+      },
+    },
+  };
+  const contents = Buffer.from(
+    [prompt, usage].map((value) => JSON.stringify(value)).join('\n') + '\n',
+  );
+  await fs.writeFile(file, contents);
+  const stat = await fs.stat(file);
+  const key = `source:${await fs.realpath(file)}`;
+  const context = {
+    sourceId: 'source',
+    sessionRef: 'session',
+    recordId: 'record',
+    observedAt: 3000,
+  };
+  store.commitBatch(
+    {
+      records: [
+        ...parseCliRecord(prompt, context).records,
+        ...parseCliRecord(
+          {
+            ...usage,
+            data: { usage: { ...usage.data.usage, copilotUsage: undefined } },
+          },
+          context,
+        ).records,
+      ],
+      warnings: [
+        'Reported AI credits are unavailable: the native billing-unit mapping has not been verified.',
+      ],
+    },
+    {
+      sourceId: key,
+      value: JSON.stringify({
+        identity: `${stat.dev}:${stat.ino}:${stat.birthtimeMs}`,
+        offset: contents.length,
+        pending: '',
+        discarding: false,
+        prefixLength: 64,
+        prefix: createHash('sha256')
+          .update(contents.subarray(0, 64))
+          .digest('hex'),
+        modified: stat.mtimeMs,
+      }),
+    },
+  );
+  store.saveSource({
+    id: 'source',
+    kind: 'cli-history',
+    path: history,
+    enabled: true,
+  });
+  await ingestion.scanNow();
+  const session = store.listSessions(filter).items[0];
+  expect(session.usage).toMatchObject({
+    aic: 2.5,
+    input: 100,
+    output: 10,
+    coverage: { aic: 'complete' },
+  });
+  expect(session.observedAt).toBe(3000);
+  expect(
+    store.getEntries(session.id, 0, 50).items.map((entry) => entry.text),
+  ).toEqual(['Preserved original prompt']);
+  expect(store.getSession(session.id)?.warnings.join(' ')).not.toMatch(
+    /mapping has not been verified/,
+  );
+  await ingestion.stop();
+  const changes: import('../src/shared/contracts.js').StoreChange[] = [];
+  ingestion = createIngestion({
+    store,
+    onChange: (change) => changes.push(change),
+  });
+  await ingestion.scanNow();
+  expect(changes).toEqual([]);
+  await fs.appendFile(
+    file,
+    JSON.stringify({
+      ...usage,
+      id: 'missing-credit',
+      data: { usage: { apiCallId: 'missing-call', inputTokens: 100 } },
+    }) + '\n',
+  );
+  await ingestion.scanNow();
+  expect(store.listSessions(filter).items[0].usage).toMatchObject({
+    aic: 2.5,
+    input: 200,
+    coverage: { aic: 'partial' },
+  });
 });
 test('junctionOutsideRootIsRejected', async () => {
   const path = join(root, 'history');

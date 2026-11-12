@@ -1,5 +1,9 @@
 # Copilot Session Dashboard Implementation Plan
 
+**Status: completed historical plan.** See [the repository handoff](../../handoff.md)
+for current implementation state. Empty-workspace assumptions and plugin-specific
+execution instructions below describe the original build, not a new task.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build a local session-first dashboard for understanding Copilot CLI and VS Code usage, monitoring observed activity, and finding/copying original prompts.

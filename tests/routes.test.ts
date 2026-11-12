@@ -77,6 +77,7 @@ test('paginationAndFilterValidation', async () => {
     'offset=-1',
     'state=made-up',
     'sort=bad',
+    'entryOrder=bad',
     'from=100&to=10',
   ]) {
     expect((await call(`/api/sessions?${query}`)).status).toBe(400);

@@ -30,31 +30,53 @@ function duration(value: number | null) {
 function stamp(value: number | null) {
   return value === null ? 'Time unavailable' : new Date(value).toLocaleString();
 }
+function ModelBadges({ models }: { models: string[] }) {
+  return (
+    <span className="model-badges">
+      {models.length
+        ? models.map((model) => {
+            const family = /gpt/i.test(model)
+              ? 'gpt'
+              : /claude/i.test(model)
+                ? 'claude'
+                : 'other';
+            return (
+              <span key={model} className={`model-badge model-${family}`}>
+                {model}
+              </span>
+            );
+          })
+        : 'Unavailable'}
+    </span>
+  );
+}
 function Pagination({
   offset,
   total,
   onChange,
   label,
+  limit = 50,
 }: {
   offset: number;
   total: number;
   onChange: (offset: number) => void;
   label: string;
+  limit?: number;
 }) {
   return (
     <nav className="pagination" aria-label={label}>
       <button
         disabled={offset === 0}
-        onClick={() => onChange(Math.max(0, offset - 50))}
+        onClick={() => onChange(Math.max(0, offset - limit))}
       >
         Previous
       </button>
       <span>
-        {total ? offset + 1 : 0}–{Math.min(offset + 50, total)} of {total}
+        {total ? offset + 1 : 0}–{Math.min(offset + limit, total)} of {total}
       </span>
       <button
-        disabled={offset + 50 >= total}
-        onClick={() => onChange(offset + 50)}
+        disabled={offset + limit >= total}
+        onClick={() => onChange(offset + limit)}
       >
         Next
       </button>
@@ -74,6 +96,9 @@ export function SessionsPage() {
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState(initial.get('session') ?? '');
   const [entryOffset, setEntryOffset] = useState(0);
+  const [entryLimit, setEntryLimit] = useState(25);
+  const [hideEmptyPreviews, setHideEmptyPreviews] = useState(true);
+  const [entryOrder, setEntryOrder] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState<Page<SessionSummary> | null>(null);
   const [detail, setDetail] = useState<SessionDetails | null>(null);
   const [entries, setEntries] = useState<Page<ConversationEntry> | null>(null);
@@ -128,6 +153,8 @@ export function SessionsPage() {
       sort,
       offset: String(offset),
       limit: '50',
+      hideEmptyPreviews: String(hideEmptyPreviews),
+      entryOrder,
     });
     if (from)
       params.set('from', String(new Date(`${from}T00:00:00`).getTime()));
@@ -143,11 +170,12 @@ export function SessionsPage() {
           result.items.find((row) => row.id === selectedRef.current) ??
           result.items[0];
         setSelected(current?.id ?? '');
-        const searchKey = `${current?.id}:${query}`;
+        const searchKey = `${current?.id}:${query}:${entryLimit}:${hideEmptyPreviews}:${entryOrder}`;
         if (focusedSearch.current !== searchKey) {
           focusedSearch.current = searchKey;
           setEntryOffset(
-            Math.floor((current?.matchedEntryOffset ?? 0) / 50) * 50,
+            Math.floor((current?.matchedEntryOffset ?? 0) / entryLimit) *
+              entryLimit,
           );
         }
       })
@@ -160,14 +188,29 @@ export function SessionsPage() {
           );
       });
     return () => controller.abort();
-  }, [query, source, state, model, from, to, sort, offset, version]);
+  }, [
+    query,
+    source,
+    state,
+    model,
+    from,
+    to,
+    sort,
+    offset,
+    version,
+    entryLimit,
+    hideEmptyPreviews,
+    entryOrder,
+  ]);
   useEffect(() => {
-    const key = `${selected}:${entryOffset}`;
+    const key = `${selected}:${entryOffset}:${entryLimit}:${hideEmptyPreviews}:${entryOrder}`;
     if (detailKey.current !== key) {
+      if (!detailKey.current.startsWith(`${selected}:`)) {
+        setDetail(null);
+        setActivity(null);
+      }
       detailKey.current = key;
-      setDetail(null);
       setEntries(null);
-      setActivity(null);
     }
     setDetailError('');
     if (!selected) return;
@@ -177,7 +220,7 @@ export function SessionsPage() {
         signal: controller.signal,
       }),
       apiRequest<Page<ConversationEntry>>(
-        `/api/sessions/${selected}/entries?offset=${entryOffset}&limit=50`,
+        `/api/sessions/${selected}/entries?offset=${entryOffset}&limit=${entryLimit}&hideEmptyPreviews=${hideEmptyPreviews}&entryOrder=${entryOrder}`,
         { signal: controller.signal },
       ),
       apiRequest<Page<ActivityEntry>>(
@@ -201,7 +244,14 @@ export function SessionsPage() {
           );
       });
     return () => controller.abort();
-  }, [selected, entryOffset, version]);
+  }, [
+    selected,
+    entryOffset,
+    entryLimit,
+    hideEmptyPreviews,
+    entryOrder,
+    version,
+  ]);
   const reset = (setter: (value: string) => void, value: string) => {
     setOffset(0);
     setter(value);
@@ -334,7 +384,8 @@ export function SessionsPage() {
               onClick={() => {
                 setSelected(item.id);
                 setEntryOffset(
-                  Math.floor((item.matchedEntryOffset ?? 0) / 50) * 50,
+                  Math.floor((item.matchedEntryOffset ?? 0) / entryLimit) *
+                    entryLimit,
                 );
                 setNotice('');
               }}
@@ -352,9 +403,13 @@ export function SessionsPage() {
               </span>
               <span className="row-meta">
                 <span>
-                  {item.models.length > 1
-                    ? 'Multiple models'
-                    : (item.models[0] ?? 'Model unavailable')}
+                  {item.models.length > 1 ? (
+                    'Multiple models'
+                  ) : item.models.length ? (
+                    <ModelBadges models={item.models} />
+                  ) : (
+                    'Model unavailable'
+                  )}
                 </span>
                 <span>
                   {quantity(item.usage.aic)} AIC
@@ -413,7 +468,9 @@ export function SessionsPage() {
                     : stateNames[summary.state]}
                   {summary.stateScope === 'turn' ? ' — turn scope' : ''}
                 </p>
-                <p>Models: {summary.models.join(', ') || 'Unavailable'}</p>
+                <p>
+                  Models: <ModelBadges models={summary.models} />
+                </p>
                 <p className="path">
                   {summary.repository ??
                     summary.directory ??
@@ -478,6 +535,83 @@ export function SessionsPage() {
                     Full prompts. Text-only response previews.
                   </span>
                 </div>
+                <div className="conversation-controls">
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={hideEmptyPreviews}
+                      onChange={(event) => {
+                        setHideEmptyPreviews(event.target.checked);
+                        setEntryOffset(0);
+                      }}
+                    />
+                    Hide empty assistant previews
+                  </label>
+                  <div className="conversation-page-controls">
+                    <label className="entry-limit">
+                      Entries per page
+                      <select
+                        value={entryLimit}
+                        onChange={(event) => {
+                          setEntryLimit(Number(event.target.value));
+                          setEntryOffset(0);
+                        }}
+                      >
+                        {[25, 50, 100, 150].map((count) => (
+                          <option key={count} value={count}>
+                            {count}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div
+                      className="conversation-order"
+                      role="group"
+                      aria-label="Conversation order"
+                    >
+                      {(['desc', 'asc'] as const).map((order) => {
+                        const label =
+                          order === 'desc'
+                            ? 'Descending (newest first)'
+                            : 'Ascending (oldest first)';
+                        return (
+                          <button
+                            key={order}
+                            type="button"
+                            aria-label={label}
+                            title={label}
+                            aria-pressed={entryOrder === order}
+                            onClick={() => {
+                              setEntryOrder(order);
+                              setEntryOffset(0);
+                            }}
+                          >
+                            <svg
+                              width="16"
+                              height="16"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              aria-hidden="true"
+                              focusable="false"
+                            >
+                              <path
+                                d={
+                                  order === 'desc'
+                                    ? 'M12 5v14m-5-5 5 5 5-5'
+                                    : 'M12 19V5m-5 5 5-5 5 5'
+                                }
+                              />
+                            </svg>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
                 <p role="status" className="notice">
                   {notice}
                 </p>
@@ -523,27 +657,29 @@ export function SessionsPage() {
                 ))}
                 {entries?.total === 0 && (
                   <p className="muted">
-                    Original prompts are unavailable from this source. Import a
-                    chat export to browse and reuse them.
+                    {hideEmptyPreviews
+                      ? 'No conversation entries match these display settings.'
+                      : 'Original prompts are unavailable from this source. Import a chat export to browse and reuse them.'}
                   </p>
                 )}
                 {entries && (
                   <Pagination
                     offset={entryOffset}
                     total={entries.total}
+                    limit={entryLimit}
                     onChange={setEntryOffset}
                     label="Conversation pages"
                   />
                 )}
               </section>
-              <section className="activity">
-                <div className="section-heading">
-                  <h3>Observed activity</h3>
+              <details className="activity" key={summary.id}>
+                <summary>
+                  <span className="activity-title">Observed activity</span>
                   <span className="muted">
                     {detail!.counts.modelCalls} model calls /{' '}
                     {detail!.counts.toolCalls} tool calls observed
                   </span>
-                </div>
+                </summary>
                 <p className="muted">
                   Export delivery can lag. Completed spans do not prove a tool
                   is currently running.
@@ -580,7 +716,7 @@ export function SessionsPage() {
                     events.
                   </p>
                 )}
-              </section>
+              </details>
             </>
           )}
         </div>

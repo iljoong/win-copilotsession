@@ -234,6 +234,37 @@ main {
 .state-active {
   color: var(--signal);
 }
+.model-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 100%;
+  vertical-align: middle;
+}
+.model-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.model-gpt {
+  color: #9ee3c9;
+  background: #203e3b;
+  border-color: #38685a;
+}
+.model-claude {
+  color: #f1bea4;
+  background: #49352f;
+  border-color: #815d4e;
+}
+.model-other {
+  color: #c9b9f4;
+  background: #332f4d;
+  border-color: #635883;
+}
 .state-interrupted,
 .state-error {
   color: #f3b4a7;
@@ -299,6 +330,44 @@ details p {
 .section-heading span {
   font-size: 11px;
 }
+.conversation-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.conversation-controls .entry-limit {
+  flex-direction: row;
+  align-items: center;
+}
+.conversation-controls select {
+  width: auto;
+}
+.conversation-page-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.conversation-order {
+  display: flex;
+  gap: 4px;
+}
+.conversation-order button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  color: var(--muted);
+}
+.conversation-order button[aria-pressed='true'] {
+  color: var(--selection);
+  border-color: var(--selection);
+  background: #29405c;
+}
 .conversation-entry {
   padding: 16px 0;
   border-bottom: 1px solid var(--rule);
@@ -326,6 +395,7 @@ pre {
   margin: 0;
 }
 .user-entry pre {
+  color: #f4d57a;
   border-left: 2px solid var(--selection);
   padding-left: 15px;
 }
@@ -380,6 +450,20 @@ pre {
 }
 .activity {
   margin-top: 34px;
+}
+.activity > summary {
+  color: inherit;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+.activity-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.activity > summary .muted {
+  display: inline-block;
+  margin-left: 12px;
+  font-size: 11px;
 }
 .activity p {
   font-size: 12px;

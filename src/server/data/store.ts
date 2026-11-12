@@ -32,6 +32,8 @@ export interface Store {
     id: string,
     offset: number,
     limit: number,
+    hideEmptyPreviews?: boolean,
+    order?: 'asc' | 'desc',
   ): Page<ConversationEntry>;
   getActivity(id: string, offset: number, limit: number): Page<ActivityEntry>;
   getUsage(filter: SessionFilter): UsageReport;
@@ -82,6 +84,27 @@ export function openStore(dbPath: string): Store {
     records(id)
       .filter((row) => row.kind === kind)
       .sort((a, b) => (a.timestamp ?? Infinity) - (b.timestamp ?? Infinity));
+  const conversationRecords = (
+    id: string,
+    hideEmptyPreviews = false,
+    order: 'asc' | 'desc' = 'asc',
+  ) => {
+    const rows = chronological(id, 'entry').filter(
+      (record) =>
+        record.kind === 'entry' &&
+        (!hideEmptyPreviews ||
+          record.role !== 'assistant-preview' ||
+          record.text.trim() !== ''),
+    );
+    // Reverse timestamp ties too, while keeping undated entries last.
+    return order === 'desc'
+      ? rows
+          .reverse()
+          .sort(
+            (a, b) => (b.timestamp ?? -Infinity) - (a.timestamp ?? -Infinity),
+          )
+      : rows;
+  };
   const sourceKind = (record: NormalizedRecord): SourceKind => {
     const row = db
       .prepare('SELECT value FROM sources WHERE id=?')
@@ -190,9 +213,11 @@ export function openStore(dbPath: string): Store {
         .map((row) => {
           const index = Math.max(
             0,
-            chronological(row.id, 'entry').findIndex(
-              (entry) => entry.eventId === bySession.get(row.id),
-            ),
+            conversationRecords(
+              row.id,
+              filter.hideEmptyPreviews,
+              filter.entryOrder,
+            ).findIndex((entry) => entry.eventId === bySession.get(row.id)),
           );
           return {
             ...row,
@@ -254,6 +279,26 @@ export function openStore(dbPath: string): Store {
             )
             .run(id, record.kind, record.eventId, JSON.stringify(record));
           if (
+            record.kind === 'usage' &&
+            record.usage.origin === 'cli-history' &&
+            record.usage.aic !== null
+          ) {
+            db.prepare(
+              `
+              UPDATE records SET payload=json_set(payload,
+                '$.usage.aic', ?, '$.usage.coverage.aic', ?)
+              WHERE session_id=? AND kind='usage' AND event_id=?
+                AND json_extract(payload, '$.usage.origin')='cli-history'
+                AND json_extract(payload, '$.usage.aic') IS NULL
+            `,
+            ).run(
+              record.usage.aic,
+              record.usage.coverage?.aic ?? 'complete',
+              id,
+              record.eventId,
+            );
+          }
+          if (
             inserted.changes &&
             record.kind === 'entry' &&
             record.role === 'original-user'
@@ -263,7 +308,18 @@ export function openStore(dbPath: string): Store {
             ).run(id, record.eventId, record.text, '');
           }
           const warnings = [
-            ...new Set([...sessionWarnings(id), ...batch.warnings]),
+            ...new Set([
+              ...sessionWarnings(id).filter(
+                (warning) =>
+                  !(
+                    record.kind === 'usage' &&
+                    record.usage.origin === 'cli-history' &&
+                    warning ===
+                      'Reported AI credits are unavailable: the native billing-unit mapping has not been verified.'
+                  ),
+              ),
+              ...batch.warnings,
+            ]),
           ].slice(0, 30);
           db.prepare('UPDATE sessions SET warnings=? WHERE id=?').run(
             JSON.stringify(warnings),
@@ -314,20 +370,24 @@ export function openStore(dbPath: string): Store {
         },
       };
     },
-    getEntries(id, offset, limit) {
-      return pageRecords(id, 'entry', offset, limit, (r) => {
-        if (r.kind !== 'entry' || r.role === 'captured-context')
-          throw new Error('Unexpected entry');
-        return {
-          id: r.eventId,
-          role: r.role,
-          text: r.text,
-          truncated: r.truncated,
-          timestamp: r.timestamp,
-          model: r.model,
-          requestId: r.requestId,
-        };
-      });
+    getEntries(id, offset, limit, hideEmptyPreviews = false, order = 'asc') {
+      return paginate(
+        conversationRecords(id, hideEmptyPreviews, order).map((r) => {
+          if (r.kind !== 'entry' || r.role === 'captured-context')
+            throw new Error('Unexpected entry');
+          return {
+            id: r.eventId,
+            role: r.role,
+            text: r.text,
+            truncated: r.truncated,
+            timestamp: r.timestamp,
+            model: r.model,
+            requestId: r.requestId,
+          };
+        }),
+        offset,
+        limit,
+      );
     },
     getActivity(id, offset, limit) {
       return pageRecords(id, 'activity', offset, limit, (r) => {

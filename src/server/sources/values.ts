@@ -13,6 +13,10 @@ export function number(value: unknown): number | null {
     ? value
     : null;
 }
+export function creditsFromNanoAiu(value: unknown): number | null {
+  const amount = number(value);
+  return amount === null ? null : amount / 1e9;
+}
 export function time(value: unknown): number | null {
   if (typeof value === 'number') return number(value);
   if (typeof value === 'string') {

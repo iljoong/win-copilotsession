@@ -4,7 +4,14 @@ import type {
   RecordBase,
   RecordContext,
 } from '../../shared/contracts.js';
-import { amounts, number, object, text, time } from './values.js';
+import {
+  amounts,
+  creditsFromNanoAiu,
+  number,
+  object,
+  text,
+  time,
+} from './values.js';
 import { toAssistantPreview } from './vscode.js';
 
 export function parseCliRecord(
@@ -54,6 +61,10 @@ export function parseCliRecord(
     const usage = object(data.usage);
     const end = base.timestamp;
     const duration = number(usage.duration);
+    const aic =
+      usage.aiCreditsStatus === 'unavailable'
+        ? null
+        : creditsFromNanoAiu(object(usage.copilotUsage).totalNanoAiu);
     records.push({
       ...base,
       kind: 'usage',
@@ -65,7 +76,16 @@ export function parseCliRecord(
           cacheRead: number(usage.cacheReadTokens),
           cacheWrite: number(usage.cacheWriteTokens),
           reasoning: number(usage.reasoningTokens),
+          aic,
         }),
+        coverage: {
+          aic:
+            aic === null
+              ? 'unavailable'
+              : usage.aiCreditsStatus === 'partial'
+                ? 'partial'
+                : 'complete',
+        },
         id:
           text(usage.apiCallId) ??
           text(object(usage.accounting).usageId) ??
@@ -80,9 +100,10 @@ export function parseCliRecord(
         end,
       },
     });
-    warnings.push(
-      'Reported AI credits are unavailable: the native billing-unit mapping has not been verified.',
-    );
+    if (aic === null)
+      warnings.push(
+        'AI credits were not reported for this call; missing values are not zero.',
+      );
   } else if (type === 'assistant.turn_start' || type === 'assistant.turn_end') {
     const start = type.endsWith('start');
     records.push({
