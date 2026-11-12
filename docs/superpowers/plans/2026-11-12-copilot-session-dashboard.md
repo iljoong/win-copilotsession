@@ -118,6 +118,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create package/configuration files from the file map, `.gitignore`, `index.html`, `src\server\main.ts`, `src\server\http.ts`, minimal `src\client\main.tsx`, `src\client\App.tsx`, and `tests\http.test.ts`.
 
 **Interfaces:**
+
 - Produce `createHttpServer(options: { accessToken: string; assetDir: string; handleApi: (req: IncomingMessage, res: ServerResponse) => Promise<boolean> }): Server` in `http.ts`.
 - Produce a CLI startup entry with `--data-dir`, `--port`, and `--no-open`; default data directory is `%LOCALAPPDATA%\CopilotSessionDashboard`, port `0` chooses an available loopback port.
 - Scripts: `dev`, `build`, `start`, `test`, `test:e2e`, `typecheck`, `lint`, `format:check`. `start` runs `dist\server\main.js`; `build` emits the server under `dist\server`, shared modules under `dist\shared`, and Vite assets under `dist\client`.
@@ -134,6 +135,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create `src\shared\contracts.ts`, `src\server\sources\cli.ts`, `vscode.ts`, `telemetry.ts`, `tests\adapters.test.ts`, and `tests\fixtures\cli-events.jsonl`, `vscode-export.json`, `cli-telemetry.jsonl`, `vscode-telemetry.jsonl`. Put fixture provenance and supported client versions in `README.md`.
 
 **Interfaces:**
+
 - Produce `parseCliRecord(value: unknown, context: RecordContext): NormalizedBatch`.
 - Produce `parseVsCodeExport(value: unknown, context: ImportContext): NormalizedBatch`.
 - Produce `parseTelemetryRecord(value: unknown, context: RecordContext, client: 'cli' | 'vscode'): NormalizedBatch`.
@@ -151,6 +153,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create `src\server\data\schema.ts`, `store.ts`, `accounting.ts`, `tests\store.test.ts`, `tests\accounting.test.ts`.
 
 **Interfaces:**
+
 - Produce `openStore(dbPath: string): Store` and `projectUsage(observations: UsageObservation[]): UsageSummary`.
 - `Store` exposes `commitBatch(batch: NormalizedBatch, checkpoint?: { sourceId: string; value: string }): StoreChange`, `getCheckpoint(sourceId: string): string | null`, `listSessions(filter: SessionFilter): Page<SessionSummary>`, `getSession(id: string): SessionDetails | null`, `getEntries(id: string, offset: number, limit: number): Page<ConversationEntry>`, `getActivity(id: string, offset: number, limit: number): Page<ActivityEntry>`, `getUsage(filter: SessionFilter): UsageReport`, `saveSource(config: SourceConfig): void`, `listSources(): SourceStatus[]`, `clearLocalData(): void`, and `close(): void`.
 - Define `ConversationEntry` and `ActivityEntry` as canonical persisted projections of Task 2's respective normalized records. Define `UsageReport` as totals, per-model/per-source rows, and counts of sessions with missing/partial metrics. `clearLocalData` clears app history/cursors and disables configured sources.
@@ -168,6 +171,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create `src\server\sources\jsonl.ts`, `ingestion.ts`, `tests\ingestion.test.ts`; extend source status persistence in `store.ts`.
 
 **Interfaces:**
+
 - Produce `readJsonlChunk(input: { pending: Buffer; chunk: Buffer; discarding?: boolean }): { lines: string[]; pending: Buffer; discarding: boolean; warnings: string[] }` in `jsonl.ts`; retain undecoded trailing bytes until a full line arrives.
 - Produce `createIngestion(options: { store: Store; onChange: (change: StoreChange) => void; pollMs?: number }): IngestionService`.
 - `IngestionService` exposes `enableSource(config: SourceConfig): Promise<void>`, `disableSource(id: string): Promise<void>`, `scanNow(): Promise<void>`, `start(): void`, and `stop(): Promise<void>`. Default `pollMs` is 1000; serialize ingestion per source.
@@ -184,6 +188,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create `src\server\routes.ts`, `events.ts`, `tests\routes.test.ts`; connect `main.ts`, `http.ts`, store, and ingestion.
 
 **Interfaces:**
+
 - Produce `createApi(options: { store: Store; ingestion: IngestionService; events: EventHub }): (req: IncomingMessage, res: ServerResponse) => Promise<boolean>`.
 - Produce `createEventHub(): EventHub` with `publish(change: StoreChange): void`, `attach(req: IncomingMessage, res: ServerResponse): void`, and `close(): void`.
 - Routes: `GET /api/sessions`, `/api/sessions/:id`, `/api/sessions/:id/entries`, `/api/sessions/:id/activity`, `/api/usage`, `/api/sources`, `/api/events`; `PUT /api/sources/:id`; `POST /api/imports/vscode`; `POST /api/local-data/clear`.
@@ -201,6 +206,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create `src\client\api.ts`, `sessions.tsx`, `sources.tsx`, `styles.css`, `tests\sessions.test.tsx`, `tests\sources.test.tsx`; extend `App.tsx`.
 
 **Interfaces:**
+
 - Produce `apiRequest<T>(path: string, init?: RequestInit): Promise<T>` and `subscribeChanges(onChange: (change: StoreChange) => void, onReconnect: () => void): () => void` in `api.ts`. Handle 401 as expired local access, not an empty history.
 - Produce `SessionsPage(): ReactElement` and `SourcesPage(): ReactElement`. Persist selection/filter navigation in URL query parameters, not transcript text; maintain focus and loading/error states.
 
@@ -216,6 +222,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create `src\client\usage.tsx`, `tests\usage.test.tsx`; connect the Usage navigation in `App.tsx`.
 
 **Interfaces:**
+
 - Produce `UsagePage(): ReactElement`, consuming `/api/usage` and the shared filter/usage DTOs.
 - Produce `formatMetric(value: number | null, coverage: Coverage, unit: 'tokens' | 'aic' | 'milliseconds'): string` in `usage.tsx`, shared with session summaries where useful.
 
@@ -230,6 +237,7 @@ Task 2 owns `src\shared\contracts.ts`. Use these names and semantics; tasks may 
 **Files:** Create `playwright.config.ts`, `tests\e2e\dashboard.spec.ts`; finish `README.md` and npm scripts/configuration.
 
 **Interfaces:**
+
 - Playwright starts the built app with `--data-dir` pointing to a disposable directory and `--no-open`; the harness obtains the startup URL without committing/logging its access token to reports.
 - Production run: `npm ci`, `npm run build`, `npm start`. No telemetry configuration or private reads occur until sources are explicitly enabled.
 
