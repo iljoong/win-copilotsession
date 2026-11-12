@@ -1,0 +1,4 @@
+{"id":"start","type":"session.start","timestamp":"2026-11-12T00:00:00Z","data":{"sessionId":"demo-cli","copilotVersion":"1.0.109","context":{"cwd":"C:\\demo"}}}
+{"id":"prompt","type":"user.message","timestamp":"2026-11-12T00:00:01Z","data":{"content":"Preserve retry cancellation.","transformedContent":"Expanded context that is not the original prompt."}}
+{"id":"answer","type":"assistant.message","timestamp":"2026-11-12T00:00:02Z","data":{"content":"The retry loop now checks cancellation.","model":"demo-model","reasoningText":"Private reasoning is not a preview."}}
+{"id":"usage","type":"session.usage_record","timestamp":"2026-11-12T00:00:03Z","data":{"usage":{"apiCallId":"call-1","model":"demo-model","inputTokens":100,"outputTokens":20,"cacheReadTokens":60,"duration":2000,"cost":1,"accounting":{"sourceSessionId":"demo-cli","sequence":1,"usageId":"usage-1"}}}}

@@ -1,0 +1,1 @@
+{"name":"chat demo-model","spanId":"call-1","startTime":[1794441601,0],"endTime":[1794441603,0],"attributes":{"gen_ai.operation.name":"chat","gen_ai.conversation.id":"demo-cli","gen_ai.response.model":"demo-model","gen_ai.usage.input_tokens":100,"gen_ai.usage.output_tokens":20,"gen_ai.usage.cache_read.input_tokens":60}}

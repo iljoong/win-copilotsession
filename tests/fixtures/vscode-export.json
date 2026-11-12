@@ -1,0 +1,22 @@
+{
+  "responderUsername": "GitHub Copilot",
+  "initialLocation": "panel",
+  "requests": [
+    {
+      "requestId": "request-1",
+      "message": { "text": "Preserve retry cancellation.", "parts": [] },
+      "variableData": { "variables": [] },
+      "modelId": "demo-model",
+      "timestamp": 1794441601000,
+      "copilotCredits": 0.25,
+      "response": [
+        { "value": "The retry loop now checks cancellation." },
+        { "kind": "thinking", "value": "Do not show this." },
+        {
+          "kind": "toolInvocationSerialized",
+          "result": "Do not show this either."
+        }
+      ]
+    }
+  ]
+}
