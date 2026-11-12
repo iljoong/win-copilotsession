@@ -68,5 +68,6 @@ test('cacheShareUsesOnlyCompatibleKnownCounts', () => {
     usage({ id: 'b', input: 100, cacheRead: null }),
   ]);
   expect(result.cacheShare).toBe(0.6);
+  expect(result).toMatchObject({ cacheShareInput: 100, cacheShareRead: 60 });
   expect(result.warnings.join(' ')).toMatch(/cache/i);
 });

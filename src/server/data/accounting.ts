@@ -156,6 +156,10 @@ export function projectUsage(observations: UsageObservation[]): UsageSummary {
     agentMs: intervalUnion(intervals),
     wallMs: null,
     warnings,
+    cacheShareInput: compatible.length ? denominator : null,
+    cacheShareRead: compatible.length
+      ? compatible.reduce((sum, item) => sum + item.cacheRead!, 0)
+      : null,
     cacheShare:
       denominator > 0
         ? compatible.reduce((sum, item) => sum + item.cacheRead!, 0) /

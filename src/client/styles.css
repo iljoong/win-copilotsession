@@ -413,6 +413,66 @@ td {
   max-width: 1150px;
   margin: auto;
 }
+.usage-page {
+  max-width: 1400px;
+  margin: auto;
+}
+.filters.usage-filters {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+}
+.usage-overview {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1.3fr);
+  gap: 48px;
+  margin: 28px 0 34px;
+}
+.usage-ledger {
+  margin: 0;
+  border-top: 1px solid var(--rule);
+}
+.usage-ledger > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--rule);
+  padding: 13px 0;
+}
+.usage-ledger dt {
+  font-size: 13px;
+}
+.usage-ledger dd {
+  margin: 0;
+  text-align: right;
+  font-size: 16px;
+}
+.usage-notes p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.table-scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+.table-scroll table {
+  min-width: 740px;
+}
+.table-scroll td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.breakdown-heading {
+  margin-top: 34px;
+}
+@media (max-width: 800px) {
+  .usage-overview {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .filters.usage-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

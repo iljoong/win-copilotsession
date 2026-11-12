@@ -105,6 +105,8 @@ export type UsageSummary = Amounts & {
   models: ModelUsage[];
   warnings: string[];
   cacheShare: number | null;
+  cacheShareInput?: number | null;
+  cacheShareRead?: number | null;
 };
 export type SessionSummary = {
   id: string;

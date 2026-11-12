@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { SessionsPage } from './sessions.js';
 import { SourcesPage } from './sources.js';
+import { UsagePage } from './usage.js';
 import './styles.css';
 
 export function App() {
@@ -14,7 +15,7 @@ export function App() {
           Copilot Sessions
         </a>
         <nav aria-label="Main navigation">
-          {['sessions', 'sources'].map((name) => (
+          {['sessions', 'usage', 'sources'].map((name) => (
             <button
               key={name}
               aria-current={view === name ? 'page' : undefined}
@@ -25,13 +26,25 @@ export function App() {
                 window.history.replaceState({}, '', url);
               }}
             >
-              {name === 'sessions' ? 'Sessions' : 'Sources'}
+              {name === 'sessions'
+                ? 'Sessions'
+                : name === 'usage'
+                  ? 'Usage'
+                  : 'Sources'}
             </button>
           ))}
         </nav>
         <span className="local-label">On this machine</span>
       </header>
-      <main>{view === 'sources' ? <SourcesPage /> : <SessionsPage />}</main>
+      <main>
+        {view === 'sources' ? (
+          <SourcesPage />
+        ) : view === 'usage' ? (
+          <UsagePage />
+        ) : (
+          <SessionsPage />
+        )}
+      </main>
     </>
   );
 }
