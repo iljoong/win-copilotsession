@@ -15,6 +15,7 @@ import type {
   StoreChange,
   UsageObservation,
   UsageReport,
+  UsageSummary,
 } from '../../shared/contracts.js';
 import { migrate } from './schema.js';
 import { metricKeys, projectUsage } from './accounting.js';
@@ -77,6 +78,10 @@ export function openStore(dbPath: string): Store {
       .prepare('SELECT payload FROM records WHERE session_id=? ORDER BY id')
       .all(id)
       .map((row) => parse<NormalizedRecord>(row.payload));
+  const chronological = (id: string, kind: string) =>
+    records(id)
+      .filter((row) => row.kind === kind)
+      .sort((a, b) => (a.timestamp ?? Infinity) - (b.timestamp ?? Infinity));
   const sourceKind = (record: NormalizedRecord): SourceKind => {
     const row = db
       .prepare('SELECT value FROM sources WHERE id=?')
@@ -183,20 +188,12 @@ export function openStore(dbPath: string): Store {
       rows = rows
         .filter((row) => bySession.has(row.id))
         .map((row) => {
-          const entry = db
-            .prepare(
-              "SELECT id FROM records WHERE session_id=? AND kind='entry' AND event_id=?",
-            )
-            .get(row.id, bySession.get(row.id)!);
-          const index = entry
-            ? Number(
-                db
-                  .prepare(
-                    "SELECT COUNT(*) AS n FROM records WHERE session_id=? AND kind='entry' AND id < ?",
-                  )
-                  .get(row.id, entry.id!)!.n,
-              )
-            : 0;
+          const index = Math.max(
+            0,
+            chronological(row.id, 'entry').findIndex(
+              (entry) => entry.eventId === bySession.get(row.id),
+            ),
+          );
           return {
             ...row,
             matchedEntryId: bySession.get(row.id),
@@ -233,7 +230,7 @@ export function openStore(dbPath: string): Store {
     limit: number,
     map: (record: NormalizedRecord) => T,
   ): Page<T> {
-    const rows = records(id).filter((record) => record.kind === kind);
+    const rows = chronological(id, kind);
     if (kind === 'activity') rows.reverse();
     return paginate(rows.map(map), offset, limit);
   }
@@ -349,7 +346,18 @@ export function openStore(dbPath: string): Store {
       const sessions = selected(filter);
       let excluded = 0;
       const bySource = new Map<string, UsageObservation[]>();
+      const sourceSessions = new Map<string, SessionSummary[]>();
+      const excludedIds = new Set<string>();
       const eligible = sessions.flatMap((session) => {
+        const source = session.sourceKinds.some((kind) =>
+          kind.startsWith('cli-'),
+        )
+          ? 'CLI'
+          : 'VS Code';
+        sourceSessions.set(source, [
+          ...(sourceSessions.get(source) ?? []),
+          session,
+        ]);
         const observations = records(session.id).flatMap((record) =>
           record.kind === 'usage'
             ? [
@@ -366,37 +374,39 @@ export function openStore(dbPath: string): Store {
         );
         if (observations.some((item) => item.combinedEligible === false)) {
           excluded++;
+          excludedIds.add(session.id);
           return [];
         }
-        const source = session.sourceKinds.some((kind) =>
-          kind.startsWith('cli-'),
-        )
-          ? 'CLI'
-          : 'VS Code';
         bySource.set(source, [
           ...(bySource.get(source) ?? []),
           ...observations,
         ]);
         return observations;
       });
-      const totals = projectUsage(eligible);
-      for (const key of metricKeys()) {
-        if (
-          totals[key] !== null &&
-          (excluded > 0 ||
-            sessions.some(
-              (session) => session.usage.coverage[key] !== 'complete',
-            ))
-        ) {
-          totals.coverage[key] = 'partial';
+      function withCoverage(usage: UsageSummary, matching: SessionSummary[]) {
+        for (const key of metricKeys()) {
+          if (
+            usage[key] !== null &&
+            matching.some(
+              (session) =>
+                excludedIds.has(session.id) ||
+                session.usage.coverage[key] !== 'complete',
+            )
+          )
+            usage.coverage[key] = 'partial';
         }
+        return usage;
       }
+      const totals = withCoverage(projectUsage(eligible), sessions);
       return {
         totals,
         models: totals.models,
         sources: [...bySource].map(([source, rows]) => ({
           source,
-          usage: projectUsage(rows),
+          usage: withCoverage(
+            projectUsage(rows),
+            sourceSessions.get(source) ?? [],
+          ),
         })),
         sessions: sessions.length,
         excluded,

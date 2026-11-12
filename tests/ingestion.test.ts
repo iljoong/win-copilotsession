@@ -81,6 +81,66 @@ test('truncateAndRotateDoNotSkipRecords', async () => {
   await ingestion.scanNow();
   expect(store.listSessions(filter).items[0].usage.input).toBe(300);
 });
+test('rotationDrainsRecordsWrittenBetweenPolls', async () => {
+  const path = join(root, 'telemetry.jsonl');
+  await fs.writeFile(path, span('one'));
+  await enable(path);
+  await fs.appendFile(path, span('two'));
+  await fs.rename(path, join(root, 'rotated.jsonl'));
+  await fs.writeFile(path, span('three'));
+  await ingestion.scanNow();
+  expect(store.listSessions(filter).items[0].usage.input).toBe(300);
+});
+test('restartRecoversRotatedIdentityInTheSameDirectory', async () => {
+  const path = join(root, 'telemetry.jsonl');
+  await fs.writeFile(path, span('one'));
+  await enable(path);
+  await ingestion.stop();
+  await fs.appendFile(path, span('two'));
+  await fs.rename(path, join(root, 'rotated.jsonl'));
+  await fs.writeFile(path, span('three'));
+  ingestion = createIngestion({ store, onChange: () => {} });
+  await ingestion.scanNow();
+  expect(store.listSessions(filter).items[0].usage.input).toBe(300);
+});
+test('replacementDuringShutdownReportsUnrecoverableRotationRisk', async () => {
+  const path = join(root, 'telemetry.jsonl');
+  await fs.writeFile(path, span('one'));
+  await enable(path);
+  await ingestion.stop();
+  await fs.unlink(path);
+  await fs.writeFile(path, span('three'));
+  ingestion = createIngestion({ store, onChange: () => {} });
+  await ingestion.scanNow();
+  expect(store.listSources()[0].warnings.join(' ')).toMatch(
+    /unread rotated records/i,
+  );
+  await ingestion.scanNow();
+  expect(store.listSources()[0].warnings.join(' ')).toMatch(
+    /unread rotated records/i,
+  );
+});
+test('sourceFailureAndEmptyRecoveryPublishStatusTransitions', async () => {
+  const path = join(root, 'telemetry.jsonl');
+  const changes: import('../src/shared/contracts.js').StoreChange[] = [];
+  ingestion = createIngestion({
+    store,
+    onChange: (change) => changes.push(change),
+  });
+  await fs.writeFile(path, '');
+  await enable(path);
+  changes.length = 0;
+  await fs.unlink(path);
+  await ingestion.scanNow();
+  expect(changes).toContainEqual({ sourceIds: ['source'], sessionIds: [] });
+  changes.length = 0;
+  await fs.writeFile(path, '');
+  await ingestion.scanNow();
+  expect(changes).toContainEqual({ sourceIds: ['source'], sessionIds: [] });
+  changes.length = 0;
+  await ingestion.scanNow();
+  expect(changes).toEqual([]);
+});
 test('disabledSourceIsNeverRead', async () => {
   const path = join(root, 'telemetry.jsonl');
   await fs.writeFile(path, span('one'));

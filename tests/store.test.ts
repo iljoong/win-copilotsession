@@ -121,6 +121,25 @@ test('promptSearchFindsTextAfter1000Characters', () => {
   expect(page.total).toBe(1);
   expect(page.items[0].matchedEntryId).toBeDefined();
 });
+test('lateHistoryIsChronologicalAndSearchOffsetsUseTheSameOrder', () => {
+  const store = open();
+  store.commitBatch({
+    records: [
+      entry({ eventId: 'answer', role: 'assistant-preview', timestamp: 200 }),
+      entry({
+        eventId: 'prompt',
+        text: 'chronological needle',
+        timestamp: 100,
+      }),
+    ],
+    warnings: [],
+  });
+  const session = store.listSessions({ ...filter, query: 'needle' }).items[0];
+  expect(
+    store.getEntries(session.id, 0, 50).items.map((row) => row.id),
+  ).toEqual(['prompt', 'answer']);
+  expect(session.matchedEntryOffset).toBe(0);
+});
 test('searchPreservesOriginalCrlfAndWhitespace', () => {
   const store = open();
   const text = '\r\n  café e\u0301 😀\r\n';
@@ -192,4 +211,35 @@ test('combinedTotalsRetainIndependentClientSessions', () => {
     warnings: [],
   });
   expect(store.getUsage(filter).totals.input).toBe(200);
+});
+test('sourceTotalsMarkMissingSessionMetricsPartial', () => {
+  const store = open();
+  const base = entry({ namespace: 'vscode', sourceId: 'editor' });
+  store.commitBatch({
+    records: [
+      {
+        ...base,
+        kind: 'usage',
+        usage: {
+          id: 'call',
+          scope: 'call',
+          origin: 'vscode-telemetry',
+          model: null,
+          start: null,
+          end: null,
+          input: 100,
+          output: null,
+          cacheRead: null,
+          cacheWrite: null,
+          reasoning: null,
+          aic: null,
+        },
+      },
+      entry({ namespace: 'vscode', sourceId: 'editor', sessionRef: 'missing' }),
+    ],
+    warnings: [],
+  });
+  const report = store.getUsage(filter);
+  expect(report.totals.input).toBe(100);
+  expect(report.sources[0].usage.coverage.input).toBe('partial');
 });

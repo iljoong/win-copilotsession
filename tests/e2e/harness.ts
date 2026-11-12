@@ -4,15 +4,17 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BrowserContext } from '@playwright/test';
+import type { AddressInfo } from 'node:net';
 import type { Page, SessionSummary } from '../../src/shared/contracts.js';
 
-export async function startDashboard(context: BrowserContext) {
+export async function startDashboard(context: BrowserContext, dev = false) {
   const root = await mkdtemp(join(tmpdir(), 'copilot-dashboard-e2e-'));
   const telemetryPath = join(root, 'synthetic-telemetry.jsonl');
   await writeFile(telemetryPath, '');
   let child: ChildProcessWithoutNullStreams | null = null;
   let origin = '';
   let cookie = '';
+  const bindings = new Map<string, AddressInfo>();
   async function stop() {
     const process = child;
     child = null;
@@ -23,13 +25,22 @@ export async function startDashboard(context: BrowserContext) {
     await exited;
   }
   async function boot(browser: BrowserContext) {
+    bindings.clear();
     const process = spawn(
       globalThis.process.execPath,
       [
+        '--import',
+        `data:text/javascript,${encodeURIComponent(`import { Server } from 'node:net';
+         const listen = Server.prototype.listen;
+         Server.prototype.listen = function (...args) {
+           this.once('listening', () => console.log('Bound: ' + JSON.stringify(this.address())));
+           return listen.apply(this, args);
+         };`)}`,
         join(globalThis.process.cwd(), 'dist', 'server', 'main.js'),
         '--data-dir',
         join(root, 'data'),
         '--no-open',
+        ...(dev ? ['--dev'] : []),
       ],
       { stdio: 'pipe', windowsHide: true },
     );
@@ -58,6 +69,14 @@ export async function startDashboard(context: BrowserContext) {
       });
       process.stdout.on('data', (chunk) => {
         output = (output + String(chunk)).slice(-4096);
+        for (const line of output.matchAll(/Bound: ([^\r\n]+)/g)) {
+          try {
+            const address = JSON.parse(line[1]) as AddressInfo;
+            bindings.set(`${address.address}:${address.port}`, address);
+          } catch {
+            /* Wait for the next chunk when a line is incomplete. */
+          }
+        }
         const found = output.match(
           /Dashboard: (http:\/\/127\.0\.0\.1:\d+\/\?token=[a-f0-9]{64})/,
         );
@@ -97,6 +116,9 @@ export async function startDashboard(context: BrowserContext) {
   return {
     get origin() {
       return origin;
+    },
+    get bindings() {
+      return [...bindings.values()];
     },
     telemetryPath,
     async sessions(): Promise<Page<SessionSummary>> {

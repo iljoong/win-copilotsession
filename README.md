@@ -36,6 +36,8 @@ Node may print an experimental SQLite warning; this is expected on Node 22.
 
 `npm run dev -- --no-open` runs the authenticated development server. Production
 serves bundled assets with no CDN, remote fonts, or cloud account requirement.
+Development watches and rebuilds the frontend into `dist\dev-client` without
+WebSocket/HMR listeners; refresh the browser after frontend edits.
 
 ## Choose sources explicitly
 
@@ -49,6 +51,12 @@ CLI history**, review the path, check read-only consent, and select **Enable
 source**. Existing session folders are indexed and new complete JSONL records
 are polled about once a second. Source files are never modified.
 
+Enabled readers retain the selected file identity and drain it before switching
+to a replacement. After restart, recovery checks up to 1,000 regular files in
+that same directory for the previously approved identity; unrelated file contents
+are not read. A deleted/moved-out rotated file or an incomplete final record
+cannot be reconstructed and produces a persistent coverage warning.
+
 Full original user text comes from `user.message.content`, not expanded model
 context. Assistant previews exclude reasoning and tool results and retain at
 most 1,000 Unicode code points. Prompts are copied exactly, not submitted.
@@ -59,7 +67,8 @@ Open the desired conversation in VS Code and run **Chat: Export Chat...**.
 Choose its JSON file under **Import an existing VS Code chat**.
 Exports are historical snapshots, not active sessions. Reimporting an unchanged
 file is idempotent. Imports without native identity are not merged with live
-sessions by title or prompt text. A changed snapshot can be a separate session.
+sessions by title or prompt text. Changed file contents are kept as a separate
+snapshot, even when request IDs are unchanged.
 
 Missing historical model, token, timing, or credit fields remain unavailable.
 JSON imports are limited to 50 MiB. No VS Code private storage is read.
@@ -99,6 +108,8 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
 - **Active (observed)**, idle, completed, interrupted, error, and unknown reflect
   source evidence. Idle and an assistant turn ending are not session completion.
   Imported snapshots are labeled separately.
+- Conversation entries use source-time order, with stable insertion-order ties.
+  Entries without timestamps follow dated entries; their times are not guessed.
 - Activity is observed events and counts, not a percent-complete estimate or a
   guarantee that a tool is currently running. Source time, dashboard observation
   time, connection status, and observations older than 30 seconds are visible.
@@ -124,6 +135,8 @@ App-owned SQLite data normally lives in
 base; the app always uses its dedicated `dashboard-data` child, refuses unrelated
 existing nonempty directories, and attempts owner-only Windows permissions.
 Sources shows the actual location and any permission warning.
+Explicit shared grants on that directory or known database/marker files are
+preserved but trigger a warning; do not collect sensitive history until resolved.
 
 The database contains **full original prompts**, bounded assistant previews,
 session metadata, usage observations, and ingestion checkpoints. Protect it like

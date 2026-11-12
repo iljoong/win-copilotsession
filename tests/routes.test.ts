@@ -1,6 +1,7 @@
 import { beforeEach, afterEach, expect, test } from 'vitest';
 import { readFile, mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import type { Server } from 'node:http';
 import { createHttpServer } from '../src/server/http.js';
@@ -91,6 +92,40 @@ test('repeatedJsonImportIsIdempotent', async () => {
     await call(`/api/sessions/${page.items[0].id}/entries`)
   ).json();
   expect(entries.total).toBe(2);
+});
+test('changedSnapshotWithSameRequestIdsPreservesBothVersions', async () => {
+  for (const [response, credits] of [
+    ['partial', 1],
+    ['complete', 2],
+  ] as const) {
+    expect(
+      (
+        await call('/api/imports/vscode', 'POST', {
+          responderUsername: 'GitHub Copilot',
+          requests: [
+            {
+              requestId: 'same-request',
+              message: 'Original',
+              response: [{ value: response }],
+              copilotCredits: credits,
+            },
+          ],
+        })
+      ).status,
+    ).toBe(201);
+  }
+  const page = await (await call('/api/sessions')).json();
+  expect(page.total).toBe(2);
+  const updated = page.items.find(
+    (row: { usage: { aic: number } }) => row.usage.aic === 2,
+  );
+  expect(updated).toBeDefined();
+  const entries = await (
+    await call(`/api/sessions/${updated.id}/entries`)
+  ).json();
+  expect(entries.items.map((row: { text: string }) => row.text)).toContain(
+    'complete',
+  );
 });
 test('unsupportedImportCommitsNothingAndDoesNotEchoContent', async () => {
   const response = await call('/api/imports/vscode', 'POST', {
@@ -216,3 +251,32 @@ test('dataDirectoryDoesNotAdoptUnrelatedExistingFiles', async () => {
     await readFile(join(root, 'dashboard-data', 'unrelated.txt'), 'utf8'),
   ).toBe('keep');
 });
+test.skipIf(process.platform !== 'win32')(
+  'explicitSharedWindowsAclCannotReportOwnerOnlySuccess',
+  async () => {
+    const directory = join(root, 'dashboard-data');
+    await mkdir(directory);
+    execFileSync('icacls.exe', [directory, '/grant', '*S-1-1-0:(OI)(CI)R'], {
+      stdio: 'pipe',
+      windowsHide: true,
+    });
+    const result = await prepareDataDirectory(root);
+    expect(result.warning).toMatch(/owner-only|permissions/i);
+  },
+);
+test.skipIf(process.platform !== 'win32')(
+  'explicitSharedDatabaseAclAlsoProducesPermissionWarning',
+  async () => {
+    const { directory, warning } = await prepareDataDirectory(root);
+    expect(warning).toBeNull();
+    const database = join(directory, 'sessions.db');
+    await writeFile(database, '');
+    execFileSync('icacls.exe', [database, '/grant', '*S-1-1-0:R'], {
+      stdio: 'pipe',
+      windowsHide: true,
+    });
+    expect((await prepareDataDirectory(root)).warning).toMatch(
+      /owner-only|permissions/i,
+    );
+  },
+);

@@ -36,6 +36,32 @@ export async function prepareDataDirectory(
         [directory, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`],
         { stdio: 'pipe', windowsHide: true },
       );
+      const literal = (value: string) => `'${value.replaceAll("'", "''")}'`;
+      const ownedFiles = [
+        'dashboard.owner',
+        'sessions.db',
+        'sessions.db-shm',
+        'sessions.db-wal',
+      ]
+        .map((file) => literal(join(directory, file)))
+        .join(',');
+      execFileSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `$ErrorActionPreference='Stop';
+         $acls=@([System.IO.Directory]::GetAccessControl(${literal(directory)}));
+         foreach ($file in @(${ownedFiles})) { if ([System.IO.File]::Exists($file)) { $acls += [System.IO.File]::GetAccessControl($file) } }
+         foreach ($acl in $acls) {
+           $rules=$acl.GetAccessRules($true,$true,[System.Security.Principal.SecurityIdentifier]);
+           $other=@($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -notin @(${literal(sid)},'S-1-5-18','S-1-5-32-544') });
+           if ($other.Count) { exit 1 }
+         }`,
+        ],
+        { stdio: 'pipe', windowsHide: true },
+      );
     } else await fs.chmod(directory, 0o700);
   } catch {
     warning =

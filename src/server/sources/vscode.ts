@@ -42,10 +42,7 @@ export function parseVsCodeExport(
     };
   }
   const fingerprint = createHash('sha256')
-    .update(
-      requests.map((raw) => object(raw).requestId).join('\n') ||
-        context.contentHash,
-    )
+    .update(context.contentHash)
     .digest('hex');
   const base: RecordBase = {
     sourceId: context.sourceId,

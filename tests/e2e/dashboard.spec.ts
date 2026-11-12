@@ -196,3 +196,25 @@ test('restartPreservesImportsAndPrompts', async ({ page, context, app }) => {
   ).toHaveText(prompt);
   expect((await app.sessions()).total).toBe(1);
 });
+test('developmentUsesOnlyAuthenticatedLoopbackListener', async ({
+  page,
+  context,
+}) => {
+  const app = await startDashboard(context, true);
+  try {
+    expect(app.bindings).toEqual([
+      {
+        address: '127.0.0.1',
+        family: 'IPv4',
+        port: Number(new URL(app.origin).port),
+      },
+    ]);
+    await page.goto(app.origin);
+    await expect(
+      page.getByRole('heading', { name: 'Sessions', exact: true }),
+    ).toBeVisible();
+    expect((await fetch(app.origin)).status).toBe(401);
+  } finally {
+    await app.close();
+  }
+});

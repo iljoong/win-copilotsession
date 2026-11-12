@@ -47,26 +47,30 @@ const api = createApi({
     privacyWarning: storage.warning,
   },
 });
-const vite = values.dev
-  ? await import('vite').then((module) =>
-      module.createServer({ server: { middlewareMode: true } }),
-    )
+const developmentAssets = resolve('dist', 'dev-client');
+const watcher = values.dev
+  ? await import('vite').then(async (module) => {
+      const build = await module.build({
+        build: { outDir: developmentAssets, watch: {} },
+      });
+      if (!('on' in build))
+        throw new Error('Expected a frontend build watcher');
+      await new Promise<void>((done, reject) => {
+        build.on('event', (event) => {
+          if (event.code === 'BUNDLE_END') void event.result.close();
+          if (event.code === 'END') done();
+          if (event.code === 'ERROR') reject(event.error);
+        });
+      });
+      return build;
+    })
   : null;
 const server = createHttpServer({
   accessToken,
-  assetDir: resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client'),
-  handleApi: async (req, res) => {
-    if (await api(req, res)) return true;
-    if (vite && !req.url?.startsWith('/api/')) {
-      return new Promise<boolean>((done, reject) => {
-        res.once('finish', () => done(true));
-        vite.middlewares(req, res, (error?: unknown) =>
-          error ? reject(error) : done(false),
-        );
-      });
-    }
-    return false;
-  },
+  assetDir: values.dev
+    ? developmentAssets
+    : resolve(dirname(fileURLToPath(import.meta.url)), '..', 'client'),
+  handleApi: api,
 });
 server.listen(port, '127.0.0.1', () => {
   const address = server.address();
@@ -90,7 +94,7 @@ async function shutdown() {
   shuttingDown = true;
   await ingestion.stop();
   events.close();
-  await vite?.close();
+  await watcher?.close();
   server.closeAllConnections();
   await new Promise<void>((done) => server.close(() => done()));
   store.close();
