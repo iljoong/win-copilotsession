@@ -182,7 +182,27 @@ export function openStore(dbPath: string): Store {
       );
       rows = rows
         .filter((row) => bySession.has(row.id))
-        .map((row) => ({ ...row, matchedEntryId: bySession.get(row.id) }));
+        .map((row) => {
+          const entry = db
+            .prepare(
+              "SELECT id FROM records WHERE session_id=? AND kind='entry' AND event_id=?",
+            )
+            .get(row.id, bySession.get(row.id)!);
+          const index = entry
+            ? Number(
+                db
+                  .prepare(
+                    "SELECT COUNT(*) AS n FROM records WHERE session_id=? AND kind='entry' AND id < ?",
+                  )
+                  .get(row.id, entry.id!)!.n,
+              )
+            : 0;
+          return {
+            ...row,
+            matchedEntryId: bySession.get(row.id),
+            matchedEntryOffset: index,
+          };
+        });
     }
     rows = rows.filter(
       (row) =>
@@ -214,6 +234,7 @@ export function openStore(dbPath: string): Store {
     map: (record: NormalizedRecord) => T,
   ): Page<T> {
     const rows = records(id).filter((record) => record.kind === kind);
+    if (kind === 'activity') rows.reverse();
     return paginate(rows.map(map), offset, limit);
   }
   const store: Store = {

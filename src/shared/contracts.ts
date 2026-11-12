@@ -122,6 +122,7 @@ export type SessionSummary = {
   repository: string | null;
   usage: UsageSummary;
   matchedEntryId?: string;
+  matchedEntryOffset?: number;
 };
 export type ConversationEntry = {
   id: string;
