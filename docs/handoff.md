@@ -83,6 +83,14 @@ Defender startup was 9.25/1.35 seconds with zero events and complete cleanup.
 Repackaging initially encountered the user's open Desktop folder lock; normal
 closure was separately authorized. The current CRLF checkout flags 72 unrelated
 Prettier files, while changed documentation and `--end-of-line auto` pass.
+Hosted retry [43381153906](https://github.com/iljoong/win-copilotsession/actions/runs/43381153906)
+then passed every gate and published [v0.1.0](https://github.com/iljoong/win-copilotsession/releases/tag/v0.1.0).
+The immutable release tag targets `fe0d5506fe626835e3aedc6ec4a74abc94990c26`;
+its `CopilotSessionDashboard-0.1.0-win-x64.zip` asset is uploaded (113,279,898
+bytes). GitHub confirmed `draft=false` and `immutable=true`; VERSION.md stayed
+0.1.0. Hosted LF formatting, packaging, WebView2 and Defender gates are now
+verified; Windows 10 and managed ASR-Block coverage remain separate local/target
+claims, not inferred from this hosted success.
 
 ## Stack and entry points
 
