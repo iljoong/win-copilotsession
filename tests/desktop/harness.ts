@@ -54,6 +54,9 @@ async function pwsh(script: string) {
   );
   return stdout.trim();
 }
+export async function nativeWindowTitle(pid: number) {
+  return pwsh(`(Get-Process -Id ${pid}).MainWindowTitle`);
+}
 
 /** PIDs of running node.exe processes whose image lives under the staged folder. */
 export async function stagedNodePids(): Promise<number[]> {

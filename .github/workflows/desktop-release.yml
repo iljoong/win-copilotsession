@@ -1,0 +1,127 @@
+name: Desktop ZIP release
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION.md]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  version:
+    runs-on: windows-2025
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Require main and LF checkout
+        run: |
+          if ($env:GITHUB_REF -ne 'refs/heads/main') { throw 'Desktop releases require main.' }
+          git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Read canonical version and check release state
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $info = node scripts\version.mjs --json | ConvertFrom-Json
+          node scripts\release-desktop.mjs --check
+          Add-Content -LiteralPath $env:GITHUB_OUTPUT -Value "version=$($info.version)"
+
+  release:
+    needs: version
+    runs-on: windows-2025
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    concurrency:
+      group: desktop-release-${{ needs.version.outputs.version }}
+      cancel-in-progress: false
+    steps:
+      - name: LF checkout
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Recheck version before building
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts\release-desktop.mjs --check
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Restore dependencies and browser
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm ci
+          npx --no-install playwright install chromium
+      - name: Provision missing WebView2 on the CI runner
+        run: |
+          $machine = Join-Path ${env:ProgramFiles(x86)} 'Microsoft\EdgeWebView\Application'
+          $user = Join-Path $env:LOCALAPPDATA 'Microsoft\EdgeWebView\Application'
+          if (!(Test-Path -LiteralPath $machine) -and !(Test-Path -LiteralPath $user)) {
+            $setup = Join-Path $env:RUNNER_TEMP 'MicrosoftEdgeWebview2Setup.exe'
+            Invoke-WebRequest -Uri 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile $setup
+            $signature = Get-AuthenticodeSignature -LiteralPath $setup
+            if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft Corporation') {
+              throw 'WebView2 installer signature is not valid Microsoft code.'
+            }
+            $process = Start-Process -FilePath $setup -ArgumentList '/silent', '/install' -Wait -PassThru
+            if ($process.ExitCode -notin 0, 3010) { throw "WebView2 install failed: $($process.ExitCode)" }
+          }
+      - name: Browser and static gates
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm test
+          npm run typecheck
+          npm run lint
+          npm run format:check
+          npm run test:e2e
+      - name: Native, package and Defender gates
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          npm run desktop:test
+          dotnet format desktop\CopilotSessionDashboard.Desktop.sln --verify-no-changes
+          npm run desktop:package -- -Flavor Release
+          npm run desktop:e2e
+          $version = (node scripts\version.mjs --json | ConvertFrom-Json).version
+          npm run desktop:defender-smoke -- -Zip "desktop\artifacts\CopilotSessionDashboard-$version-win-x64.zip"
+      - name: Verify ZIP layout and native version
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $version = (node scripts\version.mjs --json | ConvertFrom-Json).version
+          $zip = "desktop\artifacts\CopilotSessionDashboard-$version-win-x64.zip"
+          $dll = 'desktop\artifacts\Release\CopilotSessionDashboard\CopilotSessionDashboard.dll'
+          if ([Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $dll)).ProductVersion -ne $version) {
+            throw 'Native application version does not match VERSION.md.'
+          }
+          $archive = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $zip))
+          try {
+            $names = @($archive.Entries | ForEach-Object { $_.FullName.Replace('/', '\') })
+            foreach ($required in @('CopilotSessionDashboard.dll', 'CopilotSessionDashboard (Defender ASR).cmd',
+              'node\node.exe', 'runtime\dotnet.exe', 'app\dist\server\main.js', 'README-FIRST.txt')) {
+              if ("CopilotSessionDashboard\$required" -notin $names) { throw "Missing ZIP entry: $required" }
+            }
+            if ($names -match '(^|\\)(sessions\.db[^\\]*|shell\.log)$') { throw 'Private state found in ZIP.' }
+          } finally { $archive.Dispose() }
+      - name: Publish verified ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts\release-desktop.mjs --publish

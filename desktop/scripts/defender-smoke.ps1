@@ -37,7 +37,9 @@ $ErrorActionPreference = 'Stop'
 
 . (Join-Path $PSScriptRoot 'common.ps1')
 
-$windowTitle = 'Copilot Session Dashboard'
+$repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$versionInfo = Invoke-Checked -Exe 'node' -Arguments @((Join-Path $repoRoot 'scripts\version.mjs'), '--json') | ConvertFrom-Json
+$windowTitle = "Copilot Session Dashboard v$($versionInfo.version)"
 $launcherName = 'CopilotSessionDashboard (Defender ASR).cmd'
 $defenderLog = 'Microsoft-Windows-Windows Defender/Operational'
 $defenderIds = 1116, 1117, 1121, 1122

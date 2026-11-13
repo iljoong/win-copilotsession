@@ -9,7 +9,7 @@ This is a local-only, read-only Copilot session dashboard for Windows.
 - **Product behavior, source ingestion, identity, accounting, or privacy changes:**
   read the relevant sections of the
   [approved product design](docs/superpowers/specs/2026-11-12-copilot-session-dashboard-design.md)
-  and [README](README.md).
+  and the [detailed manual](manual/README.md).
 - **Desktop packaging or migration:** read the
   [portable WebView2 spec](docs/superpowers/specs/2026-11-13-windows-portable-webview2-design.md),
   the desktop section of [docs/handoff.md](docs/handoff.md), and the
@@ -20,6 +20,23 @@ This is a local-only, read-only Copilot session dashboard for Windows.
 - The [original implementation plan](docs/superpowers/plans/2026-11-12-copilot-session-dashboard.md)
   is historical. Its empty-workspace assumptions, scratch paths, and
   plugin-specific execution instructions are not prerequisites for new work.
+
+## Explicit version policy
+
+- [VERSION.md](VERSION.md) is the application-version authority. Its newest
+  `## MAJOR.MINOR.PATCH` entry supplies native metadata/title, ZIP name and release
+  tag/notes. Keep earlier entries intact.
+- Never bump a version on an ordinary commit/push/build. Add an entry only when
+  the user explicitly requests the next or a specific version. An unspecified
+  next version increments patch; an explicit minor/major/specific choice wins.
+- After an authorized edit, run `npm run version:sync` and
+  `npm run version:check`. npm/lock versions are projections, not authorities.
+  `desktop\versions.json` independently pins bundled dependency versions.
+- See [release procedures](manual/releases.md). A main push changing VERSION.md
+  triggers publication; confirm that effect before pushing. Manual dispatch and
+  publication require explicit authorization. Published versions are immutable.
+  Keep the repository's authorized Immutable releases setting enabled; publication
+  tools must not delete/clobber assets to recover a draft.
 
 ## Spec-driven workflow
 
@@ -50,14 +67,16 @@ This is a local-only, read-only Copilot session dashboard for Windows.
   collection/telemetry changes require user consent.
 - Preserve loopback authentication, source-path boundaries, exact prompt text,
   inert response previews, and existing app-data ownership protections. Consult
-  README's storage/privacy rules before changing these paths or trust boundaries.
+  the manual's storage/privacy rules before changing these paths or trust boundaries.
 - Preserve missing/partial usage and source provenance. A missing metric is not
   zero; idle/turn end is not session completion. Accounting rules and desktop
   parity requirements are indexed in the handoff.
 
 ## Verification
 
-Use the scripts and engine requirement in `package.json`; setup is in README.
+Use the scripts and engine requirement in `package.json`; setup is in
+[manual/development.md](manual/development.md), and verification details are in
+[manual/testing.md](manual/testing.md).
 During implementation run the smallest relevant test selection. Before a code
 handoff run:
 

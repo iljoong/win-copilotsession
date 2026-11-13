@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <VersionRepositoryRoot>$(MSBuildThisFileDirectory)</VersionRepositoryRoot>
+    <ApplicationVersion>$([System.Text.RegularExpressions.Regex]::Match($([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION.md')), '(?m)^## ([^\r\n]+)').Groups[1].Value.Trim())</ApplicationVersion>
+    <Version>$(ApplicationVersion)</Version>
+    <AssemblyVersion>$(ApplicationVersion).0</AssemblyVersion>
+    <FileVersion>$(ApplicationVersion).0</FileVersion>
+    <InformationalVersion>$(ApplicationVersion)</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

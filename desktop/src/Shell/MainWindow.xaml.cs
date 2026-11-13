@@ -43,6 +43,7 @@ public partial class MainWindow : Window
     {
 #endif
         InitializeComponent();
+        Title = $"Copilot Session Dashboard v{typeof(MainWindow).Assembly.GetName().Version!.ToString(3)}";
         Loaded += (_, _) => BeginStart();
     }
 

@@ -9,7 +9,10 @@ section below for its status and unverified items).
 | Document                                                                                            | Use                                                                               |
 | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [AGENTS.md](../AGENTS.md)                                                                           | Spec-driven coding workflow and completion gates                                  |
-| [README](../README.md)                                                                              | Running the app, source consent, usage semantics, privacy, compatibility evidence |
+| [README](../README.md)                                                                              | Desktop download/start, data summary and actual synthetic-window example          |
+| [Detailed manual](../manual/README.md)                                                              | Source consent, usage semantics, privacy and compatibility reference              |
+| [Development](../manual/development.md) / [Testing](../manual/testing.md)                           | Contributor setup and full browser/native gates                                   |
+| [Versions/releases](../manual/releases.md) / [VERSION.md](../VERSION.md)                            | Explicit application versions and guarded Desktop ZIP publication                 |
 | [Approved design](superpowers/specs/2026-11-12-copilot-session-dashboard-design.md)                 | Original product scope and acceptance boundaries                                  |
 | [Original plan](superpowers/plans/2026-11-12-copilot-session-dashboard.md)                          | Completed implementation history, not a task list to restart                      |
 | [Desktop research](research/windows-desktop-options-research.md)                                    | Electron/WebView2/C# tradeoffs, sources, and unresolved PoC gates                 |
@@ -24,9 +27,52 @@ resolve conflicts rather than silently treating a research recommendation or an
 implementation detail as a new requirement. Historical brainstorming scratch
 files referenced by the original design are not required for this handoff.
 
+## Desktop documentation and explicit releases
+
+The approved [documentation/release design](superpowers/specs/2026-11-13-desktop-readme-version-release-design.md)
+was implemented on `feature/desktop-docs-version-releases`. The user subsequently
+authorized committing/pushing to main and triggering the initial 0.1.0 Release
+workflow, without a version increment. Root README is Desktop-first; detailed original guidance is retained
+under `manual`, with development/testing/release guides and an inspected actual
+Release-window PNG containing synthetic snapshots only.
+
+Root VERSION.md starts at 0.1.0 and supplies native title/metadata, ZIP name,
+tag and release notes. `version:sync` updates npm/lock projections only after an
+explicit version request; normal builds never increment or edit history.
+The nearest desktop props import root props, and validation independently checks
+all native properties, including an overridden ApplicationVersion.
+
+The new workflow triggers on main/VERSION.md pushes or main manual dispatch.
+Publication uses exact-SHA targets, draft-aware GraphQL/ID lookup, uploaded-asset
+confirmation and no clobber/deletion. Matching complete draft ZIPs are reused
+only after digest/size/state checks. Immutable releases was enabled and verified
+with explicit owner authorization; retain it as an administrative prerequisite.
+The contents-scoped workflow token cannot query that admin-only settings API.
+
+Final evidence: 142 unit tests, typecheck/lint, 13 Chromium workflows, 57 shell
+tests, C# format, Release package and nine WebView2 workflows passed. Defender
+cold/warm startup was 8.33/1.47 seconds with zero 1116/1117/1121/1122 events and
+complete cleanup. Ordinary builds preserved VERSION.md/npm/lock hashes.
+Actionlint, seven embedded PowerShell blocks and the workflow's exact local
+ZIP/native checks passed; 61 local documentation/image paths resolve.
+Changed-file formatting passes; standard repository formatting still flags
+56 unrelated CRLF files (`--end-of-line auto` passes).
+
+Final review's pending-draft, native-authority and published-asset-race findings
+were fixed RED-to-GREEN; no minors deferred. A final package rerun initially hit
+a newly opened external Desktop instance's folder lock. Closure was authorized;
+the app had already exited, and the subsequent package/native/Defender run passed.
+The earlier packaging run overlapping new RED tests also failed before rerun.
+Hosted Actions and Windows 10 were not part of the local verification above.
+Main publication is now authorized; verify its hosted outcome in Actions rather
+than interpreting local checks as a completed public release.
+The local Release ZIP is rebuilt and the app must be relaunched to use it.
+
 ## Stack and entry points
 
-Declared versions and commands are authoritative in `package.json` and its lock.
+Application versions are authoritative in root `VERSION.md`; npm/lock metadata
+are checked projections. Dependency versions and commands remain in `package.json`
+and its lock; bundled native/runtime pins remain in `desktop\versions.json`.
 The current declared stack is:
 
 | Layer        | Implementation                                                             |

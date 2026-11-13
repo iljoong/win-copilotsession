@@ -1,10 +1,11 @@
 import { test as base, expect, type Page } from '@playwright/test';
-import { appendFile, mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { exported, prompt } from '../e2e/fixtures.js';
 import {
   launchDesktop,
   makeDesktopFolders,
+  nativeWindowTitle,
   readClipboard,
   resetClipboard,
   stagedNodePids,
@@ -73,6 +74,12 @@ test('loads sessions without token in URL', async ({ desktop }) => {
   await expect(
     page.getByRole('button', { name: 'Sessions', exact: true }),
   ).toHaveAttribute('aria-current', 'page');
+  const { version } = JSON.parse(
+    await readFile(resolve('package.json'), 'utf8'),
+  ) as { version: string };
+  expect(await nativeWindowTitle(desktop.shellPid)).toBe(
+    `Copilot Session Dashboard v${version}`,
+  );
   expect(page.url()).toMatch(loopback);
   expect(page.url()).not.toContain('token=');
   expect(

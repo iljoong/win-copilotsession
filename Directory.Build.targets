@@ -1,0 +1,7 @@
+<Project>
+  <Target Name="ValidateApplicationVersion" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(Version)' != '$(ApplicationVersion)' Or '$(AssemblyVersion)' != '$(ApplicationVersion).0' Or '$(FileVersion)' != '$(ApplicationVersion).0' Or '$(InformationalVersion)' != '$(ApplicationVersion)'"
+           Text="Native version overrides must agree with VERSION.md." />
+    <Exec Command="node &quot;$(MSBuildThisFileDirectory)scripts\version.mjs&quot; --native &quot;$(ApplicationVersion)&quot; &quot;$(Version)&quot; &quot;$(AssemblyVersion)&quot; &quot;$(FileVersion)&quot; &quot;$(InformationalVersion)&quot;" />
+  </Target>
+</Project>

@@ -43,6 +43,9 @@ $repoRoot = Split-Path -Parent $desktopRoot
 
 . (Join-Path $scriptsRoot 'common.ps1')
 
+$versionInfo = Invoke-Checked -Exe 'node' -Arguments @((Join-Path $repoRoot 'scripts\version.mjs'), '--json') | ConvertFrom-Json
+$version = $versionInfo.version
+Invoke-Checked -Exe 'node' -Arguments @((Join-Path $repoRoot 'scripts\version.mjs'), '--check')
 $downloadsRoot = Join-Path $desktopRoot 'downloads'
 $nodeDownloadRoot = Join-Path $downloadsRoot 'node'
 $runtimeDownloadRoot = Join-Path $downloadsRoot 'runtime'
@@ -154,7 +157,6 @@ if ($SignTool) {
 # --- 9. Release zip ----------------------------------------------------------------
 
 if ($Flavor -eq 'Release') {
-    $version = (Get-Content -LiteralPath (Join-Path $repoRoot 'package.json') -Raw | ConvertFrom-Json).version
     $zipPath = Join-Path $artifactsRoot "CopilotSessionDashboard-$version-win-x64.zip"
     if (Test-Path -LiteralPath $zipPath) {
         Remove-Item -LiteralPath $zipPath -Force
