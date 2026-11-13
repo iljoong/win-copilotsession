@@ -68,6 +68,22 @@ Main publication is now authorized; verify its hosted outcome in Actions rather
 than interpreting local checks as a completed public release.
 The local Release ZIP is rebuilt and the app must be relaunched to use it.
 
+Initial hosted run `43378151156` passed browser/static checks and all 57 shell
+tests, then stopped at C# formatting before producing a ZIP. `AssemblyInfo.cs`
+scaffold comments failed only with LF source bytes; both SDK 10.0.403 and
+10.0.404 reproduced the same errors. A default archive initially inherited local
+autocrlf and masked the issue. The fix removes those redundant comments, retains
+the same ThemeInfo values, and passes the complete format gate in a verified LF
+copy with hosted SDK 10.0.404. The user authorized publishing the fix and manually
+dispatching the workflow against its new commit, without changing 0.1.0.
+Local fix verification passed 142 unit tests, typecheck/lint, 13 Chromium
+workflows, 57 shell tests, Release packaging and nine WebView2 workflows.
+Hosted-SDK 10.0.404 shell tests and the full LF format gate also passed.
+Defender startup was 9.25/1.35 seconds with zero events and complete cleanup.
+Repackaging initially encountered the user's open Desktop folder lock; normal
+closure was separately authorized. The current CRLF checkout flags 72 unrelated
+Prettier files, while changed documentation and `--end-of-line auto` pass.
+
 ## Stack and entry points
 
 Application versions are authoritative in root `VERSION.md`; npm/lock metadata

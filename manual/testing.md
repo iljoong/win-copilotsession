@@ -74,5 +74,12 @@ npx prettier --check --end-of-line auto .
 The release workflow uses an LF checkout on its disposable runner so the standard
 format gate remains enforced. This does not change local Git settings.
 
+C# formatting must also be checked with actual LF sources. The initial hosted
+release caught legacy `AssemblyInfo.cs` comment formatting that passed a CRLF
+working tree. A default `git archive` can inherit `core.autocrlf=true`; use
+`git -c core.autocrlf=false archive` for an LF reproduction and verify the copied
+file's bytes. Removing the redundant scaffold comments fixes both layouts without
+changing ThemeInfo values or skipping the formatter.
+
 See [handoff evidence](../docs/handoff.md) for actual counts, transient failures
 and platform gaps, not a blanket assumption that every environment passed.
