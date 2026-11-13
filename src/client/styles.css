@@ -180,16 +180,114 @@ main {
 }
 .workspace {
   display: grid;
-  grid-template-columns: minmax(270px, 31%) minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
   border: 1px solid var(--rule);
   border-radius: 8px;
   overflow: hidden;
-  min-height: 67vh;
+  height: max(340px, calc(100dvh - var(--workspace-top, 200px) - 24px));
+}
+.workspace.workspace-list-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+.session-detail-toolbar {
+  margin-bottom: 12px;
+}
+.session-detail-toolbar button {
+  font-size: 12px;
 }
 .session-list {
   border-right: 1px solid var(--rule);
   min-width: 0;
   background: #122037;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.session-list-controls {
+  overflow: auto;
+  min-height: 0;
+  flex-shrink: 1;
+  max-height: calc(100% - 110px);
+}
+.session-list-rows {
+  overflow: auto;
+  min-height: 60px;
+  flex: 1;
+}
+.session-list-pagination {
+  flex-shrink: 0;
+}
+.session-filters {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--rule);
+}
+.session-filter-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.session-filter-buttons button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 38px;
+  height: 36px;
+  padding: 0;
+}
+.session-filter-buttons button[aria-pressed='true'],
+.session-filter-buttons button[aria-expanded='true'],
+.session-filter-buttons .filter-active {
+  color: var(--selection);
+  border-color: var(--selection);
+  background: #203854;
+}
+.session-filter-buttons .filter-active {
+  box-shadow: inset 0 -3px var(--selection);
+}
+.session-filter-editor {
+  display: grid;
+  gap: 10px;
+  background: var(--panel);
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+}
+[hidden] {
+  display: none !important;
+}
+.session-filter-editor fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.session-filter-editor legend {
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.session-filter-editor .radio-choice {
+  flex-direction: row;
+  align-items: center;
+  margin: 8px 0;
+}
+.radio-choice input {
+  width: auto;
+}
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-chips button {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: left;
+  font-size: 11px;
+  padding: 5px 7px;
 }
 .list-heading {
   padding: 14px 18px;
@@ -273,10 +371,27 @@ main {
   padding: 24px 28px;
   min-width: 0;
   background: var(--panel);
+  min-height: 0;
+  overflow: auto;
 }
 .detail-heading p {
   font-size: 13px;
   margin-bottom: 8px;
+}
+.session-overview {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 12px 0;
+  margin-bottom: 14px;
+}
+.session-overview h3 {
+  margin-top: 16px;
+}
+.session-overview .metrics {
+  margin-bottom: 0;
+}
+.coverage > summary {
+  color: #eacb8b;
 }
 .path {
   overflow-wrap: anywhere;
@@ -349,6 +464,8 @@ details p {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 .conversation-order {
   display: flex;
@@ -398,6 +515,12 @@ pre {
   color: #f4d57a;
   border-left: 2px solid var(--selection);
   padding-left: 15px;
+  max-height: 18em;
+  overflow-y: auto;
+}
+.conversation-entry pre {
+  width: 100%;
+  max-width: none;
 }
 .assistant-entry pre {
   max-height: 17rem;
@@ -631,17 +754,43 @@ td {
 .file-picker input {
   padding: 12px;
 }
-@media (min-width: 1050px) {
-  .session-list {
-    max-height: calc(100vh - 200px);
-    overflow: auto;
-    position: sticky;
-    top: 0;
+@media (max-width: 900px) {
+  .sessions-page .workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  .sessions-page .session-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .sessions-page .session-list-controls {
+    max-height: none;
+    overflow: visible;
+  }
+  .sessions-page .session-list-rows {
+    max-height: 320px;
+    flex: auto;
+  }
+  .sessions-page .session-detail {
+    overflow: visible;
   }
 }
 @media (max-width: 850px) {
   main {
     padding: 20px 14px;
+  }
+  @media (max-width: 480px) {
+    .app-header {
+      flex-wrap: wrap;
+      gap: 0;
+    }
+    .wordmark {
+      padding: 12px 0;
+    }
+    .app-header nav {
+      flex-basis: 100%;
+      min-height: 46px;
+    }
   }
   .app-header {
     padding: 0 15px;
@@ -650,15 +799,8 @@ td {
   .local-label {
     display: none;
   }
-  .workspace,
   .settings-grid {
     grid-template-columns: 1fr;
-  }
-  .session-list {
-    border-right: 0;
-    border-bottom: 1px solid var(--rule);
-    max-height: 340px;
-    overflow: auto;
   }
   .session-detail {
     padding: 20px 16px;

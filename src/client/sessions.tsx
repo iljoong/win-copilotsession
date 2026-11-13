@@ -17,6 +17,89 @@ const stateNames = {
   error: 'Error',
   unknown: 'Unknown',
 };
+const sourceNames = {
+  'cli-history': 'CLI history',
+  'cli-telemetry': 'CLI telemetry',
+  'vscode-import': 'VS Code import',
+  'vscode-telemetry': 'VS Code telemetry',
+};
+type FilterEditor = 'source' | 'state' | 'model' | 'date';
+function SessionIcon({
+  kind,
+}: {
+  kind: FilterEditor | 'lastActivity' | 'agentTime' | 'credits';
+}) {
+  const paths = {
+    source: 'M9 5 3 12l6 7m6-14 6 7-6 7',
+    state: 'M5 12a7 7 0 1 0 14 0 7 7 0 1 0-14 0m4 0 2 2 4-5',
+    model: 'M6 6h12v12H6zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4',
+    date: 'M3 5h18v16H3zM7 2v6m10-6v6M3 11h18',
+    lastActivity: 'M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0m9-6v6l4 2',
+    agentTime: 'M7 3h10M7 21h10M8 3v4l8 10v4M16 3v4L8 17v4',
+    credits:
+      'M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0m12-4h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9m3-10v12',
+  };
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={paths[kind]} />
+    </svg>
+  );
+}
+function revealPromptMatch(body: HTMLPreElement, query: string) {
+  // SQLite FTS folds both forms of Greek sigma to the same token.
+  const normalize = (value: string) =>
+    value
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+      .replace(/\u03c2/g, '\u03c3');
+  const terms = normalize(query).match(/[\p{L}\p{N}]+/gu) ?? [];
+  if (
+    !terms.length ||
+    !body.firstChild ||
+    body.firstChild.nodeType !== Node.TEXT_NODE
+  )
+    return;
+  let text = '';
+  let offset = 0;
+  const starts: number[] = [];
+  const ends: number[] = [];
+  for (const character of body.textContent ?? '') {
+    const normalized = normalize(character);
+    for (let n = 0; n < normalized.length; n++) {
+      starts.push(offset);
+      ends.push(offset + character.length);
+    }
+    text += normalized;
+    offset += character.length;
+  }
+  const tokens = [...text.matchAll(/[\p{L}\p{N}]+/gu)];
+  const index = tokens.findIndex((_, n) =>
+    terms.every((term, m) => tokens[n + m]?.[0] === term),
+  );
+  if (index < 0) return;
+  const first = tokens[index];
+  const last = tokens[index + terms.length - 1];
+  const range = document.createRange();
+  range.setStart(body.firstChild, starts[first.index]);
+  range.setEnd(body.firstChild, ends[last.index + last[0].length - 1]);
+  if (!range.getBoundingClientRect) return;
+  const hit = range.getBoundingClientRect();
+  const viewport = body.getBoundingClientRect();
+  if (hit.top < viewport.top || hit.bottom > viewport.bottom) {
+    body.scrollTop +=
+      hit.top - viewport.top - parseFloat(getComputedStyle(body).lineHeight);
+  }
+}
 const quantity = (value: number | null) =>
   value === null
     ? 'Unavailable'
@@ -99,6 +182,15 @@ export function SessionsPage() {
   const [entryLimit, setEntryLimit] = useState(25);
   const [hideEmptyPreviews, setHideEmptyPreviews] = useState(true);
   const [entryOrder, setEntryOrder] = useState<'asc' | 'desc'>('desc');
+  const [overviewOpen, setOverviewOpen] = useState(false);
+  const [filterEditor, setFilterEditor] = useState<FilterEditor | null>(null);
+  const [listVisible, setListVisible] = useState(true);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const listRowsRef = useRef<HTMLDivElement>(null);
+  const listScroll = useRef(0);
+  const listToggleRef = useRef<HTMLButtonElement>(null);
+  const toggledList = useRef(false);
+  const revealedMatches = useRef(new WeakMap<HTMLPreElement, string>());
   const [page, setPage] = useState<Page<SessionSummary> | null>(null);
   const [detail, setDetail] = useState<SessionDetails | null>(null);
   const [entries, setEntries] = useState<Page<ConversationEntry> | null>(null);
@@ -113,6 +205,32 @@ export function SessionsPage() {
   selectedRef.current = selected;
   const focusedSearch = useRef('');
   const detailKey = useRef('');
+  useEffect(() => {
+    if (toggledList.current) {
+      if (listVisible && listRowsRef.current)
+        listRowsRef.current.scrollTop = listScroll.current;
+      listToggleRef.current?.focus();
+    }
+  }, [listVisible]);
+  useEffect(() => {
+    const workspace = workspaceRef.current;
+    if (!workspace) return;
+    const update = () => {
+      workspace.style.setProperty(
+        '--workspace-top',
+        `${workspace.getBoundingClientRect().top + window.scrollY}px`,
+      );
+    };
+    update();
+    window.addEventListener('resize', update);
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    if (workspace.parentElement) observer?.observe(workspace.parentElement);
+    return () => {
+      window.removeEventListener('resize', update);
+      observer?.disconnect();
+    };
+  }, []);
   useEffect(
     () =>
       subscribeChanges(
@@ -268,6 +386,205 @@ export function SessionsPage() {
   const matched = page?.items.find(
     (item) => item.id === selected,
   )?.matchedEntryId;
+  const activeFilters = [
+    { name: 'Search', value: query, clear: () => reset(setQuery, '') },
+    {
+      name: 'Source',
+      value: source
+        ? (sourceNames[source as keyof typeof sourceNames] ?? source)
+        : '',
+      clear: () => reset(setSource, ''),
+    },
+    {
+      name: 'State',
+      value: state
+        ? (stateNames[state as keyof typeof stateNames] ?? state)
+        : '',
+      clear: () => reset(setState, ''),
+    },
+    { name: 'Model', value: model, clear: () => reset(setModel, '') },
+    {
+      name: 'Date range',
+      value: from || to ? `${from || 'Any'} to ${to || 'Any'}` : '',
+      clear: () => {
+        reset(setFrom, '');
+        setTo('');
+      },
+    },
+  ].filter((filter) => filter.value);
+  const filterLabels: Record<FilterEditor, string> = {
+    source: 'Source',
+    state: 'State',
+    model: 'Model',
+    date: 'Date range',
+  };
+  const filters = (
+    <form
+      className="session-filters"
+      onSubmit={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && filterEditor) {
+          document.getElementById(`filter-${filterEditor}`)?.focus();
+          setFilterEditor(null);
+        }
+      }}
+    >
+      <label>
+        Search original prompts
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => reset(setQuery, event.target.value)}
+          placeholder="Search full prompts and titles"
+        />
+      </label>
+      <div
+        className="session-filter-buttons"
+        role="group"
+        aria-label="Session filters"
+      >
+        {(Object.keys(filterLabels) as FilterEditor[]).map((kind) => {
+          const value = activeFilters.find(
+            (filter) => filter.name === filterLabels[kind],
+          )?.value;
+          return (
+            <button
+              key={kind}
+              id={`filter-${kind}`}
+              type="button"
+              className={value ? 'filter-active' : ''}
+              aria-label={filterLabels[kind]}
+              title={`${filterLabels[kind]}: ${value || 'All'}`}
+              aria-expanded={filterEditor === kind}
+              aria-controls={`editor-${kind}`}
+              onClick={() =>
+                setFilterEditor(filterEditor === kind ? null : kind)
+              }
+            >
+              <SessionIcon kind={kind} />
+            </button>
+          );
+        })}
+      </div>
+      {(Object.keys(filterLabels) as FilterEditor[]).map((kind) => (
+        <div
+          className="session-filter-editor"
+          key={kind}
+          id={`editor-${kind}`}
+          hidden={filterEditor !== kind}
+        >
+          {(kind === 'source' || kind === 'state') && (
+            <fieldset>
+              <legend>{filterLabels[kind]}</legend>
+              {Object.entries(
+                kind === 'source'
+                  ? { '': 'All sources', ...sourceNames }
+                  : { '': 'All states', ...stateNames },
+              ).map(([value, label]) => (
+                <label className="radio-choice" key={value}>
+                  <input
+                    type="radio"
+                    name={kind}
+                    value={value}
+                    checked={(kind === 'source' ? source : state) === value}
+                    onChange={() =>
+                      reset(kind === 'source' ? setSource : setState, value)
+                    }
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {kind === 'model' && (
+            <label>
+              Model
+              <input
+                value={model}
+                placeholder="Any model"
+                onChange={(event) => reset(setModel, event.target.value)}
+              />
+            </label>
+          )}
+          {kind === 'date' && (
+            <>
+              <label>
+                From
+                <input
+                  type="date"
+                  value={from}
+                  onChange={(event) => reset(setFrom, event.target.value)}
+                />
+              </label>
+              <label>
+                To
+                <input
+                  type="date"
+                  value={to}
+                  onChange={(event) => reset(setTo, event.target.value)}
+                />
+              </label>
+            </>
+          )}
+        </div>
+      ))}
+      <div
+        className="session-filter-buttons"
+        role="group"
+        aria-label="Session sort"
+      >
+        <span className="muted">Sort</span>
+        {(
+          [
+            ['lastActivity', 'Latest activity'],
+            ['agentTime', 'Recorded agent time'],
+            ['credits', 'Reported AIC'],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            type="button"
+            key={value}
+            title={label}
+            aria-label={label}
+            aria-pressed={sort === value}
+            onClick={() => reset(setSort, value)}
+          >
+            <SessionIcon kind={value} />
+          </button>
+        ))}
+      </div>
+      {activeFilters.length > 0 && (
+        <div className="filter-chips">
+          {activeFilters.map((filter) => (
+            <button
+              key={filter.name}
+              type="button"
+              aria-label={`Clear ${filter.name}`}
+              title={`${filter.name}: ${filter.value}`}
+              onClick={filter.clear}
+            >
+              {filter.name}: {filter.value}{' '}
+              <span aria-hidden="true">&times;</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setOffset(0);
+              setQuery('');
+              setSource('');
+              setState('');
+              setModel('');
+              setFrom('');
+              setTo('');
+            }}
+          >
+            Clear filters
+          </button>
+        </div>
+      )}
+    </form>
+  );
   async function copyPrompt(value: string) {
     try {
       if (!navigator.clipboard?.writeText)
@@ -291,153 +608,113 @@ export function SessionsPage() {
           {connected ? 'Live updates connected' : 'Live updates disconnected'}
         </span>
       </div>
-      <form className="filters" onSubmit={(event) => event.preventDefault()}>
-        <label className="search-field">
-          Search original prompts
-          <input
-            type="search"
-            aria-label="Search original prompts"
-            value={query}
-            onChange={(event) => reset(setQuery, event.target.value)}
-            placeholder="Search full prompts and titles"
-          />
-        </label>
-        <label>
-          Source
-          <select
-            value={source}
-            onChange={(event) => reset(setSource, event.target.value)}
-          >
-            <option value="">All sources</option>
-            <option value="cli-history">CLI history</option>
-            <option value="cli-telemetry">CLI telemetry</option>
-            <option value="vscode-import">VS Code import</option>
-            <option value="vscode-telemetry">VS Code telemetry</option>
-          </select>
-        </label>
-        <label>
-          State
-          <select
-            value={state}
-            onChange={(event) => reset(setState, event.target.value)}
-          >
-            <option value="">All states</option>
-            {Object.entries(stateNames).map(([key, name]) => (
-              <option key={key} value={key}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Model
-          <input
-            value={model}
-            placeholder="Any model"
-            onChange={(event) => reset(setModel, event.target.value)}
-          />
-        </label>
-        <label>
-          From
-          <input
-            type="date"
-            value={from}
-            onChange={(event) => reset(setFrom, event.target.value)}
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={to}
-            onChange={(event) => reset(setTo, event.target.value)}
-          />
-        </label>
-        <label>
-          Sort
-          <select
-            value={sort}
-            onChange={(event) => reset(setSort, event.target.value)}
-          >
-            <option value="lastActivity">Latest activity</option>
-            <option value="agentTime">Recorded agent time</option>
-            <option value="credits">Reported AIC</option>
-          </select>
-        </label>
-      </form>
       {error && (
         <p role="alert" className="error">
           {error}
         </p>
       )}
-      <div className="workspace">
-        <aside className="session-list" aria-label="Session list">
-          <div className="list-heading">
-            {page ? `${page.total} sessions` : 'Loading sessions…'}
-          </div>
-          {page?.items.map((item) => (
-            <button
-              className={`session-row ${selected === item.id ? 'selected' : ''}`}
-              key={item.id}
-              aria-label={`Open ${item.title}`}
-              aria-pressed={selected === item.id}
-              onClick={() => {
-                setSelected(item.id);
-                setEntryOffset(
-                  Math.floor((item.matchedEntryOffset ?? 0) / entryLimit) *
-                    entryLimit,
-                );
-                setNotice('');
-              }}
-            >
-              <strong>{item.title}</strong>
-              <span className="row-meta">
-                <span className={`state state-${item.state}`}>
-                  {item.snapshot ? 'Snapshot' : stateNames[item.state]}
-                </span>
-                <span>
-                  {item.sourceKinds.some((kind) => kind.startsWith('cli-'))
-                    ? 'CLI'
-                    : 'VS Code'}
-                </span>
-              </span>
-              <span className="row-meta">
-                <span>
-                  {item.models.length > 1 ? (
-                    'Multiple models'
-                  ) : item.models.length ? (
-                    <ModelBadges models={item.models} />
-                  ) : (
-                    'Model unavailable'
-                  )}
-                </span>
-                <span>
-                  {quantity(item.usage.aic)} AIC
-                  {item.usage.coverage.aic === 'partial' ? ' (partial)' : ''}
-                </span>
-              </span>
-              <span className="row-meta">
-                <span>{duration(item.usage.agentMs)} agent time</span>
-                <time>{stamp(item.lastAt)}</time>
-              </span>
-            </button>
-          ))}
-          {page?.total === 0 && (
-            <div className="empty">
-              <h2>No matching sessions</h2>
-              <p>
-                Clear filters, enable CLI history, or import a VS Code chat in{' '}
-                <a href="/?view=sources">Sources</a>.
-              </p>
+      <div className="session-detail-toolbar">
+        <button
+          type="button"
+          ref={listToggleRef}
+          aria-controls="session-list"
+          aria-expanded={listVisible}
+          onClick={() => {
+            if (listVisible)
+              listScroll.current = listRowsRef.current?.scrollTop ?? 0;
+            setFilterEditor(null);
+            toggledList.current = true;
+            setListVisible(!listVisible);
+          }}
+        >
+          {listVisible
+            ? 'Hide sessions'
+            : `Show sessions${activeFilters.length ? ` (${activeFilters.length} ${activeFilters.length === 1 ? 'filter' : 'filters'})` : ''}`}
+        </button>
+      </div>
+      <div
+        ref={workspaceRef}
+        className={`workspace${listVisible ? '' : ' workspace-list-hidden'}`}
+      >
+        <aside
+          id="session-list"
+          className="session-list"
+          aria-label="Session list"
+          hidden={!listVisible}
+        >
+          <div className="session-list-controls">
+            <div className="list-heading">
+              {page ? `${page.total} sessions` : 'Loading sessions…'}
             </div>
-          )}
+            {filters}
+          </div>
+          <div className="session-list-rows" ref={listRowsRef}>
+            {page?.items.map((item) => (
+              <button
+                className={`session-row ${selected === item.id ? 'selected' : ''}`}
+                key={item.id}
+                aria-label={`Open ${item.title}`}
+                aria-pressed={selected === item.id}
+                onClick={() => {
+                  setSelected(item.id);
+                  setEntryOffset(
+                    Math.floor((item.matchedEntryOffset ?? 0) / entryLimit) *
+                      entryLimit,
+                  );
+                  setNotice('');
+                }}
+              >
+                <strong>{item.title}</strong>
+                <span className="row-meta">
+                  <span className={`state state-${item.state}`}>
+                    {item.snapshot ? 'Snapshot' : stateNames[item.state]}
+                  </span>
+                  <span>
+                    {item.sourceKinds.some((kind) => kind.startsWith('cli-'))
+                      ? 'CLI'
+                      : 'VS Code'}
+                  </span>
+                </span>
+                <span className="row-meta">
+                  <span>
+                    {item.models.length > 1 ? (
+                      'Multiple models'
+                    ) : item.models.length ? (
+                      <ModelBadges models={item.models} />
+                    ) : (
+                      'Model unavailable'
+                    )}
+                  </span>
+                  <span>
+                    {quantity(item.usage.aic)} AIC
+                    {item.usage.coverage.aic === 'partial' ? ' (partial)' : ''}
+                  </span>
+                </span>
+                <span className="row-meta">
+                  <span>{duration(item.usage.agentMs)} agent time</span>
+                  <time>{stamp(item.lastAt)}</time>
+                </span>
+              </button>
+            ))}
+            {page?.total === 0 && (
+              <div className="empty">
+                <h2>No matching sessions</h2>
+                <p>
+                  Clear filters, enable CLI history, or import a VS Code chat in{' '}
+                  <a href="/?view=sources">Sources</a>.
+                </p>
+              </div>
+            )}
+          </div>
           {page && (
-            <Pagination
-              offset={offset}
-              total={page.total}
-              onChange={setOffset}
-              label="Session pages"
-            />
+            <div className="session-list-pagination">
+              <Pagination
+                offset={offset}
+                total={page.total}
+                onChange={setOffset}
+                label="Session pages"
+              />
+            </div>
           )}
         </aside>
         <div className="session-detail" aria-label="Selected session">
@@ -468,56 +745,74 @@ export function SessionsPage() {
                     : stateNames[summary.state]}
                   {summary.stateScope === 'turn' ? ' — turn scope' : ''}
                 </p>
-                <p>
-                  Models: <ModelBadges models={summary.models} />
-                </p>
-                <p className="path">
-                  {summary.repository ??
-                    summary.directory ??
-                    'Repository unavailable'}
-                </p>
-                <p className="muted">
-                  First source time: {stamp(summary.firstAt)}
-                  <br />
-                  Last source time: {stamp(summary.lastAt)}
-                </p>
-                {!summary.snapshot && (
-                  <p
-                    className={
-                      now - summary.observedAt > 30000 ? 'warning' : 'muted'
-                    }
-                  >
-                    {now - summary.observedAt > 30000
-                      ? 'Observation stale: no new records for 30s or more. Long operations may be silent.'
-                      : 'Showing the latest exported observations.'}
+                {!summary.snapshot && now - summary.observedAt > 30000 && (
+                  <p className="warning">
+                    Observation stale: no new records for 30s or more. Long
+                    operations may be silent.
                   </p>
                 )}
               </header>
-              <dl className="metrics">
-                {metrics.map(([key, label]) => (
-                  <div key={key}>
-                    <dt>{label}</dt>
-                    <dd>
-                      {quantity(summary.usage[key])}
-                      {summary.usage.coverage[key] === 'partial'
-                        ? ' (partial)'
-                        : ''}
-                    </dd>
+              <details
+                className="session-overview"
+                open={overviewOpen}
+                onToggle={(event) => setOverviewOpen(event.currentTarget.open)}
+              >
+                <summary>Session information and usage</summary>
+                <div className="detail-heading">
+                  <h3>Session information</h3>
+                  <p>
+                    Models: <ModelBadges models={summary.models} />
+                  </p>
+                  <p className="path">
+                    {summary.repository ??
+                      summary.directory ??
+                      'Repository unavailable'}
+                  </p>
+                  <p className="muted">
+                    First source time: {stamp(summary.firstAt)}
+                    <br />
+                    Last source time: {stamp(summary.lastAt)}
+                  </p>
+                  {!summary.snapshot && now - summary.observedAt <= 30000 && (
+                    <p className="muted">
+                      Showing the latest exported observations.
+                    </p>
+                  )}
+                </div>
+                <h3>Session usage</h3>
+                <dl className="metrics">
+                  {metrics.map(([key, label]) => (
+                    <div key={key}>
+                      <dt>{label}</dt>
+                      <dd>
+                        {quantity(summary.usage[key])}
+                        {summary.usage.coverage[key] === 'partial'
+                          ? ' (partial)'
+                          : ''}
+                      </dd>
+                    </div>
+                  ))}
+                  <div>
+                    <dt>Recorded agent time</dt>
+                    <dd>{duration(summary.usage.agentMs)}</dd>
                   </div>
-                ))}
-                <div>
-                  <dt>Recorded agent time</dt>
-                  <dd>{duration(summary.usage.agentMs)}</dd>
-                </div>
-                <div>
-                  <dt>Wall span</dt>
-                  <dd>{duration(summary.usage.wallMs)}</dd>
-                </div>
-              </dl>
+                  <div>
+                    <dt>Wall span</dt>
+                    <dd>{duration(summary.usage.wallMs)}</dd>
+                  </div>
+                </dl>
+              </details>
               {[...new Set([...detail!.warnings, ...summary.usage.warnings])]
                 .length > 0 && (
                 <details className="coverage">
-                  <summary>Data coverage and limitations</summary>
+                  <summary>
+                    Data coverage and limitations (
+                    {
+                      new Set([...detail!.warnings, ...summary.usage.warnings])
+                        .size
+                    }{' '}
+                    warnings)
+                  </summary>
                   {[
                     ...new Set([
                       ...detail!.warnings,
@@ -641,7 +936,30 @@ export function SessionsPage() {
                         </button>
                       )}
                     </header>
-                    <pre>
+                    <pre
+                      role={
+                        entry.role === 'original-user' ? 'region' : undefined
+                      }
+                      aria-label={
+                        entry.role === 'original-user'
+                          ? `Original prompt ${entryOffset + index + 1} text`
+                          : undefined
+                      }
+                      tabIndex={entry.role === 'original-user' ? 0 : undefined}
+                      ref={(body) => {
+                        if (
+                          !body ||
+                          entry.role !== 'original-user' ||
+                          entry.id !== matched ||
+                          !query.trim()
+                        )
+                          return;
+                        const key = `${selected}:${matched}:${query}`;
+                        if (revealedMatches.current.get(body) === key) return;
+                        revealPromptMatch(body, query);
+                        revealedMatches.current.set(body, key);
+                      }}
+                    >
                       {entry.role === 'original-user'
                         ? entry.text
                         : Array.from(entry.text).slice(0, 1000).join('')}

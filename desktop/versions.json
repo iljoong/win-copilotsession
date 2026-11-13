@@ -1,0 +1,17 @@
+{
+  "node": {
+    "version": "24.22.3",
+    "zip": "node-v24.22.3-win-x64.zip",
+    "sha256": "e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f"
+  },
+  "dotnetRuntime": {
+    "version": "10.0.15",
+    "url": "https://builds.dotnet.microsoft.com/dotnet/Runtime/10.0.15/dotnet-runtime-10.0.15-win-x64.zip",
+    "sha512": "06f0bedd59ae4ac722ada805a6d6bbf605bcdc790c71f59b7003878072902b5cde5dec8c40c0baa81192660d4748e9d79afdbdcb0c0ea9d6b821d0a044c4c6dd"
+  },
+  "windowsDesktopRuntime": {
+    "version": "10.0.15",
+    "url": "https://builds.dotnet.microsoft.com/dotnet/WindowsDesktop/10.0.15/windowsdesktop-runtime-10.0.15-win-x64.zip",
+    "sha512": "d82ee2e70f0c1ee7af3a908a944541993782aa80a3fd2b2e02a3fdf27edc81c0ad946f14a3fe34bae295f1b7a23f5d35a466239726e4457bb200de0344e077c4"
+  }
+}

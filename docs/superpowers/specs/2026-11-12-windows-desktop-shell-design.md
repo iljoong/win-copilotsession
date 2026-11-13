@@ -1,7 +1,9 @@
 # Windows desktop shell (.NET WebView2 + Node sidecar)
 
 Date: 2026-11-12
-Status: Approved by the user on 2026-11-12. Not implemented.
+Status: Approved by the user on 2026-11-12. Not implemented. **Superseded on
+2026-11-13** by the [portable WebView2 design](2026-11-13-windows-portable-webview2-design.md):
+its new WPF executable was blocked by this VM's Defender ASR prevalence rule.
 Size: A project (new desktop shell, backend lifecycle changes, installer)
 
 ## Intent

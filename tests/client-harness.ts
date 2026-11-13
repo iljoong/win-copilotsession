@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { transferableAbortController } from 'node:util';
 import { vi } from 'vitest';
 import { createHttpServer } from '../src/server/http.js';
 import { createApi } from '../src/server/routes.js';
@@ -58,7 +59,19 @@ export async function createClientHarness() {
       const headers = new Headers(init?.headers);
       headers.set('cookie', cookie);
       headers.set('origin', origin);
-      return nativeFetch(url, { ...init, headers });
+      const controller = transferableAbortController();
+      const abort = () => controller.abort(init?.signal?.reason);
+      if (init?.signal?.aborted) abort();
+      else init?.signal?.addEventListener('abort', abort, { once: true });
+      try {
+        return await nativeFetch(url, {
+          ...init,
+          headers,
+          signal: controller.signal,
+        });
+      } finally {
+        init?.signal?.removeEventListener('abort', abort);
+      }
     },
   );
   window.history.replaceState({}, '', '/');

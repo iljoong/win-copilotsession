@@ -10,10 +10,13 @@ This is a local-only, read-only Copilot session dashboard for Windows.
   read the relevant sections of the
   [approved product design](docs/superpowers/specs/2026-11-12-copilot-session-dashboard-design.md)
   and [README](README.md).
-- **Desktop packaging or migration:** also read the
-  [Windows desktop research](docs/research/windows-desktop-options-research.md).
-  This is a recommendation with unresolved compatibility gates, not an approved
-  Electron implementation specification. Recheck time-sensitive platform claims.
+- **Desktop packaging or migration:** read the
+  [portable WebView2 spec](docs/superpowers/specs/2026-11-13-windows-portable-webview2-design.md),
+  the desktop section of [docs/handoff.md](docs/handoff.md), and the
+  [Defender research](docs/research/2026-11-13-portable-webview2-defender-research.md).
+  The older [Windows desktop research](docs/research/windows-desktop-options-research.md)
+  is historical context, not an approved Electron implementation specification.
+  Recheck time-sensitive platform claims.
 - The [original implementation plan](docs/superpowers/plans/2026-11-12-copilot-session-dashboard.md)
   is historical. Its empty-workspace assumptions, scratch paths, and
   plugin-specific execution instructions are not prerequisites for new work.
@@ -68,6 +71,22 @@ npm run test:e2e
 
 `test:e2e` builds production assets before Playwright. Running Playwright directly
 can exercise stale assets. Install Chromium only if the runner reports it missing.
+
+When a change touches the portable desktop app (`desktop\`, `src\server\lifecycle.ts`,
+the `--desktop` mode, or packaging), also run on Windows:
+
+```powershell
+npm run desktop:test
+dotnet format desktop\CopilotSessionDashboard.Desktop.sln --verify-no-changes
+npm run desktop:package -- -Flavor Release
+npm run desktop:e2e
+npm run desktop:defender-smoke -- -Zip desktop\artifacts\CopilotSessionDashboard-<version>-win-x64.zip
+```
+
+Never launch the apphost `CopilotSessionDashboard.exe` on a machine with Defender
+ASR rules in Block; harnesses use the bundled `runtime\dotnet.exe` or the `.cmd`
+entry point. `desktop:defender-smoke` must report zero Defender 1116/1117/1121/1122
+events; if any appear, stop and report them instead of working around them.
 For documentation-only work, check formatting and referenced local paths; runtime
 tests are unnecessary unless executable behavior changes. Windows/package-specific
 claims require evidence on that target; report unrun checks on other hosts.

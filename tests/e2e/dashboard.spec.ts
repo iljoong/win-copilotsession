@@ -1,40 +1,9 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { exported, prompt, span } from './fixtures.js';
 import { startDashboard } from './harness.js';
 
-const prompt =
-  '\r\n  caf\u00e9 e\u0301 \ud83d\ude00\r\n' +
-  'Long original prompt. '.repeat(100) +
-  'findneedle';
-const exported = {
-  responderUsername: 'GitHub Copilot',
-  initialLocation: 'panel',
-  requests: [
-    {
-      requestId: 'request-a',
-      message: { text: prompt, parts: [] },
-      timestamp: Date.UTC(2026, 10, 12),
-      modelId: 'gpt-6.1-sol',
-      copilotCredits: 0,
-      response: [
-        { value: '<img src=x onerror=alert(1)>' + '\ud83d\ude00'.repeat(1200) },
-      ],
-    },
-    {
-      requestId: 'request-b',
-      message: 'Second prompt',
-      modelId: 'claude-sonnet-5',
-      response: [{ value: 'Second answer' }],
-    },
-    {
-      requestId: 'request-c',
-      message: 'Third prompt',
-      modelId: 'gemini-4',
-      response: [{ value: 'Third answer' }],
-    },
-  ],
-};
 const test = base.extend<{ app: Awaited<ReturnType<typeof startDashboard>> }>({
   app: async ({ context }, use) => {
     const app = await startDashboard(context);
@@ -73,20 +42,275 @@ async function enableSource(
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Live updates connected')).toBeVisible();
 }
-function span(id: string) {
-  return (
-    JSON.stringify({
-      name: 'execute_tool demo',
-      _spanContext: { spanId: id },
-      startTime: Date.now() - 10,
-      endTime: Date.now(),
-      attributes: {
-        'gen_ai.conversation.id': 'live-session',
-        'gen_ai.operation.name': 'execute_tool',
-      },
-    }) + '\n'
+test('conversationPaneVisibilityAndResponsiveLayout', async ({ page, app }) => {
+  const history = join(dirname(app.telemetryPath), 'pane-fixture-history');
+  await Promise.all(
+    Array.from({ length: 55 }, async (_, n) => {
+      const directory = join(history, `session-${n}`);
+      await mkdir(directory, { recursive: true });
+      await writeFile(
+        join(directory, 'events.jsonl'),
+        JSON.stringify({
+          id: 'prompt',
+          type: 'user.message',
+          timestamp: 1000 + n,
+          data: { content: `Session row ${n}` },
+        }) + '\n',
+      );
+    }),
   );
-}
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(app.origin);
+  await enableSource(page, history, 'cli-history');
+  const rows = page.locator('.session-list-rows');
+  await expect(
+    page.getByRole('navigation', { name: 'Session pages' }),
+  ).toContainText('1–50 of 55');
+  await rows.evaluate((el) => {
+    el.scrollTop = 200;
+  });
+  const before = await page.locator('.session-detail').boundingBox();
+  await page
+    .getByRole('button', { name: 'Hide sessions', exact: true })
+    .click();
+  await expect(
+    page.getByRole('button', { name: /^Show sessions/ }),
+  ).toBeFocused();
+  const after = await page.locator('.session-detail').boundingBox();
+  expect(after!.width - before!.width).toBeGreaterThan(300);
+  await page.getByRole('button', { name: /^Show sessions/ }).click();
+  await expect(
+    page.getByRole('button', { name: 'Hide sessions', exact: true }),
+  ).toBeFocused();
+  expect(await rows.evaluate((el) => el.scrollTop)).toBe(200);
+  const pages = page.getByRole('navigation', { name: 'Session pages' });
+  const initialSelection = new URL(page.url()).searchParams.get('session');
+  await pages.getByRole('button', { name: 'Next' }).click();
+  await expect(pages).toContainText('51–55 of 55');
+  await expect(rows.getByRole('button')).toHaveCount(5);
+  await page.waitForURL(
+    (url) => url.searchParams.get('session') !== initialSelection,
+  );
+  const selection = new URL(page.url()).searchParams.get('session');
+  await page
+    .getByRole('button', { name: 'Hide sessions', exact: true })
+    .click();
+  await page.getByRole('button', { name: /^Show sessions/ }).click();
+  await expect(pages).toContainText('51–55 of 55');
+  expect(new URL(page.url()).searchParams.get('session')).toBe(selection);
+  await page.getByRole('button', { name: 'Source', exact: true }).click();
+  await page.getByRole('radio', { name: 'CLI history', exact: true }).check();
+  await expect(pages).toContainText('1–50 of 55');
+  await expect(rows.getByRole('button')).toHaveCount(50);
+  for (const width of [640, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page
+      .getByRole('button', { name: 'Hide sessions', exact: true })
+      .click();
+    await expect(
+      page.getByRole('region', { name: 'Conversation' }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: /^Show sessions/ }).click();
+  }
+});
+test('promptViewportWidthHeightAndSearchReveal', async ({ page, app }) => {
+  const long = Array.from({ length: 12 }, (_, n) => `Line ${n + 1}`).join('\n');
+  await page.goto(app.origin);
+  await importChat(page, {
+    ...exported,
+    requests: [
+      {
+        requestId: 'long',
+        message: { text: long, parts: [] },
+        timestamp: Date.UTC(2026, 10, 12),
+        modelId: 'gpt-6.1-sol',
+        copilotCredits: 0,
+        response: [{ value: 'Assistant body '.repeat(30) }],
+      },
+      {
+        requestId: 'short',
+        message: 'Short text',
+        modelId: 'claude-sonnet-5',
+        response: [{ value: 'Short answer' }],
+      },
+      {
+        requestId: 'wrapped',
+        message: 'x'.repeat(3000),
+        modelId: 'gemini-4',
+        response: [{ value: 'Another answer' }],
+      },
+    ],
+  });
+  const bodies = page.locator('.conversation-entry pre');
+  for (const width of [1280, 1600, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const geometry = await bodies.evaluateAll((elements) =>
+      elements.map((el) => {
+        const css = getComputedStyle(el);
+        const box = el.getBoundingClientRect();
+        const parent = el.parentElement!.getBoundingClientRect();
+        return {
+          width: box.width,
+          parent: parent.width,
+          height: el.clientHeight,
+          scroll: el.scrollHeight,
+          line: parseFloat(css.lineHeight),
+        };
+      }),
+    );
+    for (const body of geometry)
+      expect(Math.abs(body.width - body.parent)).toBeLessThan(2);
+    const prompt = page
+      .locator('.user-entry')
+      .filter({ hasText: 'Line 12' })
+      .locator('pre');
+    const size = await prompt.evaluate((el) => ({
+      height: el.clientHeight,
+      scroll: el.scrollHeight,
+      line: parseFloat(getComputedStyle(el).lineHeight),
+    }));
+    expect(size.scroll).toBeGreaterThan(size.height);
+    expect(Math.abs(size.height - 10 * size.line)).toBeLessThanOrEqual(1);
+    const short = page
+      .locator('.user-entry')
+      .filter({ hasText: 'Short text' })
+      .locator('pre');
+    expect(await short.evaluate((el) => el.clientHeight)).toBeLessThan(
+      size.height,
+    );
+    const wrapped = page
+      .locator('.user-entry')
+      .filter({ hasText: 'xxx' })
+      .locator('pre');
+    expect(
+      await wrapped.evaluate((el) => el.scrollHeight > el.clientHeight),
+    ).toBe(true);
+    await prompt.focus();
+    await prompt.press('Control+End');
+    expect(await prompt.evaluate((el) => el.scrollTop > 0)).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const before = await bodies.first().evaluate((el) => el.clientWidth);
+  await page
+    .getByRole('button', { name: 'Hide sessions', exact: true })
+    .click();
+  expect(await bodies.first().evaluate((el) => el.clientWidth)).toBeGreaterThan(
+    before + 300,
+  );
+});
+test('searchRevealsLaterMatchWithoutRefreshScrollReset', async ({
+  page,
+  app,
+}) => {
+  await page.goto(app.origin);
+  await enableSource(page, app.telemetryPath);
+  const full =
+    '\r\n  e\u0301 😀\r\n' +
+    'Context line\r\n'.repeat(14) +
+    'Café Needle\r\nFinal line';
+  await importChat(page, {
+    ...exported,
+    requests: Array.from({ length: 31 }, (_, n) => ({
+      requestId: `request-${n}`,
+      message: { text: n === 0 ? full : `Prompt ${n}`, parts: [] },
+      timestamp: Date.UTC(2026, 10, 12) + n,
+      modelId: 'gpt-6.1-sol',
+      copilotCredits: 0,
+      response: [{ value: '' }],
+    })),
+  });
+  await page
+    .getByText('Session information and usage', { exact: true })
+    .click();
+  await page
+    .getByRole('searchbox', { name: 'Search original prompts' })
+    .fill('cafe needle');
+  const promptBody = page.locator('.search-match pre');
+  await expect(
+    page.getByRole('navigation', { name: 'Conversation pages' }),
+  ).toContainText('26–31 of 31');
+  await expect(promptBody).toHaveText(full);
+  await expect
+    .poll(() => promptBody.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  const visible = await promptBody.evaluate((el) => {
+    const index = el.textContent!.indexOf('Café Needle');
+    const range = document.createRange();
+    range.setStart(el.firstChild!, index);
+    range.setEnd(el.firstChild!, index + 11);
+    const hit = range.getBoundingClientRect();
+    const viewport = el.getBoundingClientRect();
+    return hit.top >= viewport.top && hit.bottom <= viewport.bottom;
+  });
+  expect(visible).toBe(true);
+  await promptBody
+    .locator('..')
+    .getByRole('button', { name: /^Copy prompt/ })
+    .click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(full);
+  await promptBody.evaluate((el) => {
+    el.scrollTop = 0;
+  });
+  const refreshed = page.waitForResponse(
+    (response) =>
+      response.url().includes('/entries?') && response.status() === 200,
+  );
+  await appendFile(app.telemetryPath, span('scroll-preservation'));
+  await refreshed;
+  await expect.poll(() => promptBody.evaluate((el) => el.scrollTop)).toBe(0);
+  await expect(page.locator('.session-overview')).toHaveAttribute('open', '');
+});
+test('searchRevealsGreekFinalSigmaMatch', async ({ page, app }) => {
+  const full = 'Context\r\n'.repeat(14) + 'ΚΟΣΜΟΣ\r\nFinal line';
+  await page.goto(app.origin);
+  await importChat(page, {
+    ...exported,
+    requests: [
+      {
+        requestId: 'greek',
+        message: { text: full, parts: [] },
+        timestamp: Date.UTC(2026, 10, 12),
+        modelId: 'gpt-6.1-sol',
+        copilotCredits: 0,
+        response: [{ value: '' }],
+      },
+    ],
+  });
+  await page
+    .getByRole('searchbox', { name: 'Search original prompts' })
+    .fill('ΚΟΣΜΟΣ');
+  const body = page.locator('.search-match pre');
+  await expect(body).toHaveText(full);
+  await expect
+    .poll(() => body.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  expect(
+    await body.evaluate((el) => {
+      const index = el.textContent!.indexOf('ΚΟΣΜΟΣ');
+      const range = document.createRange();
+      range.setStart(el.firstChild!, index);
+      range.setEnd(el.firstChild!, index + 6);
+      const hit = range.getBoundingClientRect();
+      const viewport = el.getBoundingClientRect();
+      return hit.top >= viewport.top && hit.bottom <= viewport.bottom;
+    }),
+  ).toBe(true);
+  await body
+    .locator('..')
+    .getByRole('button', { name: /^Copy prompt/ })
+    .click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(full);
+});
 test('importSearchCopyFiltersAndSafePreviews', async ({ page, app }, info) => {
   await page.goto(app.origin);
   await importChat(page);
@@ -96,6 +320,9 @@ test('importSearchCopyFiltersAndSafePreviews', async ({ page, app }, info) => {
     .locator('pre');
   await expect(original).toHaveText(prompt);
   await expect(original).toHaveCSS('color', 'rgb(244, 213, 122)');
+  await page
+    .getByText('Session information and usage', { exact: true })
+    .click();
   const modelColors = await Promise.all(
     ['gpt-6.1-sol', 'claude-sonnet-5', 'gemini-4'].map(async (model) => {
       const badge = page
@@ -138,20 +365,21 @@ test('importSearchCopyFiltersAndSafePreviews', async ({ page, app }, info) => {
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
     prompt,
   );
+  await page.getByRole('button', { name: 'Source', exact: true }).click();
   await page
-    .getByRole('combobox', { name: 'Source', exact: true })
-    .selectOption('vscode-import');
-  await page.getByLabel('Model', { exact: true }).fill('gpt-6.1-sol');
+    .getByRole('radio', { name: 'VS Code import', exact: true })
+    .check();
+  await page.getByRole('button', { name: 'Model', exact: true }).click();
+  await page
+    .getByRole('textbox', { name: 'Model', exact: true })
+    .fill('gpt-6.1-sol');
   await expect(original).toHaveText(prompt);
-  await page
-    .getByRole('combobox', { name: 'State', exact: true })
-    .selectOption('completed');
+  await page.getByRole('button', { name: 'State', exact: true }).click();
+  await page.getByRole('radio', { name: 'Completed', exact: true }).check();
   await expect(
     page.getByRole('heading', { name: 'No matching sessions' }),
   ).toBeVisible();
-  await page
-    .getByRole('combobox', { name: 'State', exact: true })
-    .selectOption('');
+  await page.getByRole('radio', { name: 'All states', exact: true }).check();
   await expect(original).toHaveText(prompt);
   await page.screenshot({
     path: info.outputPath('desktop.png'),
@@ -325,6 +553,9 @@ test('cliHistoryDisplaysCreditsAndRetainsThemAcrossRestart', async ({
   );
   await page.goto(app.origin);
   await enableSource(page, history, 'cli-history');
+  await page
+    .getByText('Session information and usage', { exact: true })
+    .click();
   const reported = page
     .getByLabel('Selected session')
     .locator('.metrics div')
@@ -337,6 +568,9 @@ test('cliHistoryDisplaysCreditsAndRetainsThemAcrossRestart', async ({
   });
   await app.restart(context);
   await page.goto(app.origin);
+  await page
+    .getByText('Session information and usage', { exact: true })
+    .click();
   await expect(reported).toContainText('2.5 (partial)');
   expect((await app.sessions()).items[0].usage.aic).toBe(2.5);
 });

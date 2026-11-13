@@ -1,19 +1,22 @@
 # Repository and implementation handoff
 
-Snapshot: 2026-11-12. This document describes the implemented browser application
-and accepted follow-ups. Desktop application packaging is research, not an
-implemented feature or an approved migration specification.
+Snapshot: 2026-11-13. This document describes the implemented browser application,
+accepted follow-ups, and the portable WebView2 desktop app (see the desktop
+section below for its status and unverified items).
 
 ## Reading map and authority
 
-| Document                                                                            | Use                                                                               |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| [AGENTS.md](../AGENTS.md)                                                           | Spec-driven coding workflow and completion gates                                  |
-| [README](../README.md)                                                              | Running the app, source consent, usage semantics, privacy, compatibility evidence |
-| [Approved design](superpowers/specs/2026-11-12-copilot-session-dashboard-design.md) | Original product scope and acceptance boundaries                                  |
-| [Original plan](superpowers/plans/2026-11-12-copilot-session-dashboard.md)          | Completed implementation history, not a task list to restart                      |
-| [Desktop research](research/windows-desktop-options-research.md)                    | Electron/WebView2/C# tradeoffs, sources, and unresolved PoC gates                 |
-| [WebView2 vs Tauri](research/webview2-sidecar-vs-tauri-comparison.md)               | .NET WebView2 + Node sidecar vs Tauri on Windows and macOS (research only)        |
+| Document                                                                                            | Use                                                                               |
+| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [AGENTS.md](../AGENTS.md)                                                                           | Spec-driven coding workflow and completion gates                                  |
+| [README](../README.md)                                                                              | Running the app, source consent, usage semantics, privacy, compatibility evidence |
+| [Approved design](superpowers/specs/2026-11-12-copilot-session-dashboard-design.md)                 | Original product scope and acceptance boundaries                                  |
+| [Original plan](superpowers/plans/2026-11-12-copilot-session-dashboard.md)                          | Completed implementation history, not a task list to restart                      |
+| [Desktop research](research/windows-desktop-options-research.md)                                    | Electron/WebView2/C# tradeoffs, sources, and unresolved PoC gates                 |
+| [WebView2 vs Tauri](research/webview2-sidecar-vs-tauri-comparison.md)                               | .NET WebView2 + Node sidecar vs Tauri on Windows and macOS (research only)        |
+| [Portable WebView2 + Defender research](research/2026-11-13-portable-webview2-defender-research.md) | ASR/SmartScreen evidence on this VM; why the shell runs via bundled `dotnet.exe`  |
+| [Portable desktop spec](superpowers/specs/2026-11-13-windows-portable-webview2-design.md)           | Approved 2026-11-13 desktop design (portable zip); supersedes the 2026-11-12 spec |
+| [Portable desktop plan](superpowers/plans/2026-11-13-windows-portable-webview2.md)                  | Task-by-task implementation plan for the approved desktop spec                    |
 
 The original design is the baseline. Accepted follow-ups below record subsequent
 user-requested refinements. For new work, use the explicit approved task/spec;
@@ -36,7 +39,9 @@ The current declared stack is:
 | Tests        | Vitest 3, React Testing Library, Playwright Chromium                       |
 | Style        | ESLint 9 and Prettier 3                                                    |
 
-There is no Electron, WebView2, C#, or Rust application in this repository yet.
+The portable desktop app adds a WPF WebView2 shell in C# (.NET 10, IL-only,
+framework-dependent) under desktop\; it runs the unchanged Node backend as a
+sidecar. There is no Electron or Rust application.
 Node 22 can emit the expected experimental SQLite warning.
 
 ```text
@@ -76,6 +81,23 @@ restart unless the development watcher handles it.
 
 - Session-first two-pane layout with source/state/model/date filters, usage sorts,
   full original-prompt/title search, and matching-prompt navigation/highlighting.
+- The approved [conversation-focused UI follow-up](superpowers/specs/2026-11-13-conversation-focused-sessions-ui-design.md)
+  is implemented. Search and compact icon disclosures for filters live in the
+  320px sidebar; source/state editors use radios, model stays free text, and
+  dates retain native inputs. Active filter chips are removable; sort uses icons.
+- A single Hide/Show control before the workspace keeps selection, filters,
+  both pagination offsets, and list scroll intact. Desktop list/detail panes
+  scroll independently; <=900px uses stacked document flow with the toggle
+  reachable before the list. Navigation wraps below 480px to avoid 320px overflow.
+- Session information and all eight usage fields share one native
+  collapsed-by-default expander. Title/state/scope, stale observations, and
+  coverage warning counts remain outside; expansion survives session changes
+  and same-session refreshes within the mounted page.
+- Conversation prompt/preview bodies use the available panel width. Original
+  prompts cap at ten rendered line heights, not source-newline count, and scroll
+  internally without truncation. Short prompts retain natural height. Search
+  reveals the relevant body match after pagination, including case/diacritic and
+  Greek sigma variants; SSE refresh does not reset manual prompt scroll.
 - Full user prompts are rendered as text and copied unchanged, including CRLF,
   combining characters, emoji, and leading/trailing whitespace.
 - Assistant previews are inert text, limited to 1,000 Unicode code points and a
@@ -96,7 +118,7 @@ restart unless the development watcher handles it.
   exported event counts/times and freshness, not fabricated running progress.
   An opened expander survives live refreshes of the same selected session.
 
-Conversation settings are component state, not persistent preferences. Switching
+Conversation and pane/expander settings are component state, not persistent preferences. Switching
 tabs remounts the page. List/search filters and selected session are reflected in
 the URL; do not assume all display controls are saved there.
 
@@ -160,6 +182,11 @@ README and must survive any packaging/migration.
 | API bounds, imports, consent/clearing, storage permissions      | `tests\routes.test.ts`                                          |
 | Session UI, Sources, Usage                                      | `tests\sessions.test.tsx`, `sources.test.tsx`, `usage.test.tsx` |
 | Actual production server/browser workflows                      | `tests\e2e\dashboard.spec.ts`, `harness.ts`                     |
+| Backend lifecycle and `--desktop` sidecar mode                  | `tests\lifecycle.test.ts`, `tests\desktop-cli.test.ts`          |
+| Shell policy, paths, log redaction, supervisor, single instance | `desktop\tests\Shell.Tests\*.cs` (`npm run desktop:test`)       |
+| Package layout, pinned runtimes, hashes/signatures, notices     | `desktop\tests\packaging.tests.ps1`, `desktop\scripts\*.ps1`    |
+| Staged WebView2 shell workflows over CDP                        | `tests\desktop\dashboard.spec.ts`, `harness.ts`                 |
+| Release zip under Defender ASR (`.cmd` entry point)             | `desktop\scripts\defender-smoke.ps1`                            |
 
 Last observed verification on 2026-11-12: 103 unit/integration tests and seven
 Chromium workflows passed; typecheck, lint, formatting, and production build
@@ -173,34 +200,108 @@ checked client versions are recorded in README.
 
 ## Desktop implementation handoff
 
-**Status: researched, not implemented.** The current recommendation is Electron
-reuse, conditional on packaged `node:sqlite` compatibility. C# + WebView2 + Node
-is a middle path; a native C# UI/backend is a separate rewrite decision.
+**Status: implemented on branch `feature/windows-portable-webview2`; verified on
+one Windows 11 VM with Defender for Endpoint (all ASR rules Block).** The binding
+design is the [portable WebView2 spec](superpowers/specs/2026-11-13-windows-portable-webview2-design.md);
+its [plan](superpowers/plans/2026-11-13-windows-portable-webview2.md) records the
+task history. The 2026-11-12 Electron-first research is historical context only.
 
-Before desktop implementation, obtain approval for a new spec covering supported
-Windows versions/architectures, distribution/update/signing channel, close versus
-tray behavior, startup collection policy, and data retention/uninstall behavior.
-Then use these bounded milestones:
+The app is a zip: a WPF WebView2 shell (`desktop\src\Shell`, .NET 10, IL-only,
+framework-dependent; the only PEs we build are `CopilotSessionDashboard.exe` and
+`.dll`) plus unmodified official `runtime\` (.NET) and `node\node.exe`, and the
+unchanged built backend under `app\`. Pinned runtime versions and hashes are in
+`desktop\versions.json`. The shell starts exactly one child, `node.exe
+app\dist\server\main.js --desktop --no-open --port 0`, waits up to 30 seconds for its ready line,
+and opens the loopback dashboard in a locked-down WebView2. Closing the window
+stops the backend within the 5-second grace; a job object kills `node.exe` if the
+shell dies. Two entry points share one single-instance lock:
+`CopilotSessionDashboard.exe` (ordinary PCs) and
+`CopilotSessionDashboard (Defender ASR).cmd`, which runs
+`runtime\dotnet.exe CopilotSessionDashboard.dll` because this VM's ASR rule
+`01443614` blocked new WPF apphost exes (research experiments 5–6).
 
-1. Prove SQLite import, WAL, FTS5, ESM, and required queries in the chosen packaged
-   Electron/backend process. Existing Node tests do not establish this.
-2. Extract callable backend start/stop lifecycle from the CLI entry. Keep the
-   current loopback API/SSE and authentication initially; retain renderer isolation
-   and validate navigation/IPC boundaries.
-3. Preserve existing storage paths, source consent, database contents, and
-   checkpoints. Add single-instance and deterministic backend shutdown behavior.
-4. Verify packaged install/update/restart behavior with synthetic sources and
-   measure footprint on target Windows. Treat signing and SmartScreen reputation
-   as distinct concerns; neither packaging nor a certificate guarantees no warning.
+| Area                                              | Source                                                                           |
+| ------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Backend lifecycle extraction and `--desktop` mode | `src\server\lifecycle.ts`, `src\server\main.ts`                                  |
+| Shell startup, window, WebView2 policy            | `desktop\src\Shell\App.xaml.cs`, `MainWindow.xaml.cs`, `DashboardWebView.cs`     |
+| Sidecar supervision, ready handshake, job object  | `BackendSupervisor.cs`, `ReadyLine.cs`, `JobObject.cs`, `ChildEnvironment.cs`    |
+| Paths, redacted rotating log, single instance     | `AppPaths.cs`, `SafeLog.cs`, `LogRedactor.cs`, `SingleInstance.cs`               |
+| Runtime fetch/verify, staging, notices, zip       | `desktop\scripts\fetch-runtimes.ps1`, `package.ps1`, `notices.ps1`, `common.ps1` |
+| Entry point and in-zip guide                      | `desktop\packaging\launcher.cmd.template`, `README-FIRST.txt`                    |
 
-Research versions/tooling are time-sensitive. Recheck the report's official
-references rather than treating its snapshot as a pinned runtime requirement.
+Commands (Windows, PowerShell 7, .NET 10 SDK):
+
+```powershell
+npm run desktop:test                                   # shell unit tests (dotnet test)
+npm run desktop:package -- -Flavor Release             # desktop\artifacts\CopilotSessionDashboard-<version>-win-x64.zip
+npm run desktop:e2e                                    # Testing package + 8 WebView2 workflows over CDP
+npm run desktop:defender-smoke -- -Zip desktop\artifacts\CopilotSessionDashboard-0.1.0-win-x64.zip
+pwsh -NoProfile -File desktop\tests\packaging.tests.ps1  # staged Release layout checks
+dotnet format desktop\CopilotSessionDashboard.Desktop.sln --verify-no-changes
+```
+
+Harnesses never execute the apphost exe; they run the shell dll through the
+bundled Microsoft-signed `runtime\dotnet.exe` with disposable `LOCALAPPDATA`,
+data, and `COPILOT_HOME`. Generated `desktop\artifacts`, `desktop\downloads`, and
+`desktop\**\bin|obj` are ignored by Git, ESLint, and Prettier.
+
+Verification snapshot on 2026-11-13 (this VM): `desktop:defender-smoke` passed
+with zero Defender 1116/1117/1121/1122 events, no lingering console windows, and
+`node.exe` gone within 5 seconds after both window close and shell kill; size and
+startup/memory measurements are in the
+[Defender research](research/2026-11-13-portable-webview2-defender-research.md)
+section 4.1. `npm run desktop:test`, `dotnet format --verify-no-changes`,
+`npm run desktop:e2e`, `npm run test:e2e`, `npm run typecheck`, and `npm run lint`
+passed. The later conversation-focused UI work fixes the Node 24/jsdom
+`AbortSignal` test-harness incompatibility by bridging to a native signal only
+at the test fetch boundary, preserving cancellation; production requests are
+unchanged. `npm run format:check` still reports unrelated CRLF working-tree files
+under `core.autocrlf=true`, while
+`npx prettier --check --end-of-line auto .` passes. Do not normalize unrelated
+files as part of a UI-only handoff.
+
+Unverified (no suitable environment here; check before wider release):
+
+- The exe entry point and its SmartScreen "Windows protected your PC" wording on
+  a Windows 11 PC without ASR. On this VM the exe is never launched by design.
+- Windows 10 22H2 x64.
+- A PC without the WebView2 Runtime (the native error screen is not exercised by any automated test).
+- A PC with Smart App Control on; the unsigned exe and dll may be blocked there.
+- Extracting with File Explorer: MOTW propagation and the `.cmd` "Open File -
+  Security Warning" prompt wording (the smoke uses `Expand-Archive` plus an
+  explicit Zone.Identifier stamp), and Edge download reputation warnings.
+- Code signing: `package.ps1` has an optional signing step, unused so far.
+
+### Conversation-focused UI verification (2026-11-13)
+
+The local implementation passed 120 unit/integration tests, 11 production
+Chromium workflows, 57 shell tests, and nine WebView2 workflows (including the
+combined expander, sidebar hide/show, prompt cap/scroll, and exact Copy).
+Typecheck, ESLint, `dotnet format --verify-no-changes`, Release packaging, and
+the final Release Defender smoke passed. The smoke reported zero
+1116/1117/1121/1122 events and cleaned up its disposable processes/data.
+
+The standard `npm run format:check` remains blocked by 58 unrelated CRLF files;
+the changed files pass the standard formatter, and the repository passes
+`npx prettier --check --end-of-line auto .`. An initial concurrent full test run
+failed `rotationDrainsRecordsWrittenBetweenPolls` and
+`restartRecoversRotatedIdentityInTheSameDirectory`; the unchanged ingestion file
+passed alone and the subsequent full suites passed. This is transient evidence,
+not a claimed ingestion fix.
+
+The generated Release zip is
+`desktop\artifacts\CopilotSessionDashboard-0.1.0-win-x64.zip`.
+Refresh browser mode after rebuilding, or relaunch the updated portable package.
+The user authorized in-place implementation on `main`, then approved publishing
+the previously unpushed desktop work and this UI work as one squash commit.
+No shared process was restarted and no real history was inspected.
 
 ## Publishing this handoff
 
-At this snapshot the branch is `feature/session-dashboard`, with HEAD `2cf5b0b`.
-Subsequent accepted UI/billing changes are in the local working tree and no remote
-is configured. Recheck Git state; these facts are not a permanent branch policy.
+The configured origin is `https://github.com/iljoong/win-copilotsession.git`.
+Use Git status, history, and remote tracking to establish which handoff is
+published; a local package or verification report alone is not a remote release.
 Before handing work to an agent that only sees a remote repository, ensure the
 desired code, specs, and these documents are committed and available on its target
-branch. This documentation task does not itself commit, push, or implement Electron.
+branch. The portable package is generated locally; committing source does not
+automatically publish the zip or implement Electron.

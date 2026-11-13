@@ -4,7 +4,10 @@ Local-only session browser for Copilot CLI and VS Code.
 
 Browse sessions, search and copy complete original prompts, inspect text-only
 assistant previews, and monitor observed activity. The session-first workspace
-stacks on narrow screens. Usage views distinguish reported zero, missing data,
+puts search and compact icon-led filters inside the hideable Sessions pane.
+Session information and usage share one collapsed-by-default expander, leaving
+Conversation as the main reading surface. The workspace stacks on narrow screens.
+Usage views distinguish reported zero, missing data,
 partial coverage, and overlapping sources.
 
 ## Documentation and agent handoff
@@ -14,8 +17,13 @@ partial coverage, and overlapping sources.
   regression map, current limitations, and desktop implementation handoff.
 - [Approved product design](docs/superpowers/specs/2026-11-12-copilot-session-dashboard-design.md):
   baseline scope and acceptance boundaries.
+- [Conversation-focused UI design](docs/superpowers/specs/2026-11-13-conversation-focused-sessions-ui-design.md):
+  approved sidebar, combined expander, and prompt-viewport behavior.
 - [Windows desktop research](docs/research/windows-desktop-options-research.md):
-  Electron, WebView2, and native C# comparison. Desktop packaging is not implemented.
+  Electron, WebView2, and native C# comparison (historical research).
+- [Portable desktop spec](docs/superpowers/specs/2026-11-13-windows-portable-webview2-design.md)
+  and [Defender research](docs/research/2026-11-13-portable-webview2-defender-research.md):
+  the implemented portable WebView2 app described below.
 
 ## Run on Windows
 
@@ -48,6 +56,60 @@ Node may print an experimental SQLite warning; this is expected on Node 22.
 serves bundled assets with no CDN, remote fonts, or cloud account requirement.
 Development watches and rebuilds the frontend into `dist\dev-client` without
 WebSocket/HMR listeners; refresh the browser after frontend edits.
+
+## Portable Windows app
+
+The portable app is a zip (`CopilotSessionDashboard-<version>-win-x64.zip`) for
+Windows 11 x64 and Windows 10 22H2 x64. It contains a WebView2 window, the
+unchanged Node backend, and unmodified official .NET and Node.js runtimes. There
+is no installer, no administrator prompt, no tray icon, and no auto-start. It
+needs the Microsoft Edge WebView2 Runtime, which Windows 11 includes; the app
+never installs it.
+
+1. Before extracting, right-click the downloaded zip, choose **Properties**, tick
+   **Unblock**, and select **OK**. This avoids a per-file "Open File - Security
+   Warning" prompt for the `.cmd` entry point.
+2. Extract the zip to a folder you own, for example under `Downloads`.
+3. Start one of the two entry points in the extracted `CopilotSessionDashboard`
+   folder:
+   - `CopilotSessionDashboard.exe` for ordinary PCs. It is unsigned, so Microsoft
+     Defender SmartScreen may show "Windows protected your PC"; choose
+     **More info** then **Run anyway** if you trust the download.
+   - `CopilotSessionDashboard (Defender ASR).cmd` when a managed PC's Defender
+     Attack Surface Reduction rules block the exe (event 1121). It runs the same
+     app through the bundled, Microsoft-signed `runtime\dotnet.exe`. A console
+     window may flash briefly at start.
+
+Closing the window quits the app and its backend. Starting it again while it is
+running brings the existing window forward. Do **not** run the portable app and
+the browser mode (`npm start`/`npm run dev`) at the same time; they share the
+same data folder and simultaneous use is unsupported.
+
+The app shares browser mode's data at
+`%LOCALAPPDATA%\CopilotSessionDashboard\dashboard-data` (same consent, ownership,
+and permission rules as below). The window's own WebView2 profile and
+`logs\shell.log` live under `%LOCALAPPDATA%\CopilotSessionDashboard\desktop`; the
+log never contains startup tokens or prompts. Nothing is written inside the
+extracted folder. Deleting that folder removes the app; dashboard data stays and is
+removed only with **Clear local data**. Deleting the `desktop` folder only removes
+logs and the WebView2 profile without touching dashboard data.
+
+Build and verify the package from this repository (Windows, PowerShell 7, .NET 10
+SDK; runtimes are downloaded once and verified by hash and signature):
+
+```powershell
+npm run desktop:test                 # shell unit tests
+npm run desktop:package -- -Flavor Release   # desktop\artifacts\*.zip
+npm run desktop:e2e                  # Testing package + WebView2 workflows
+npm run desktop:defender-smoke -- -Zip desktop\artifacts\CopilotSessionDashboard-0.1.0-win-x64.zip
+```
+
+`desktop:defender-smoke` extracts the zip to a temporary folder with spaces and
+non-ASCII characters, marks every file as downloaded, starts only the `.cmd`
+entry point with disposable `LOCALAPPDATA` and an empty `COPILOT_HOME`, checks
+startup, close, forced shell termination, and console windows, and fails on any
+Defender 1116/1117/1121/1122 event during the run. Harnesses never start the exe
+entry point directly.
 
 ## Choose sources explicitly
 
@@ -124,6 +186,20 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
   Empty assistant previews are hidden by default before pagination, with 25 entries
   per page by default and 50, 100, or 150 available. Down/up buttons beside the page
   size select descending/ascending order.
+- Conversation bodies use the panel's available width. Original prompts display
+  at most ten wrapped lines with keyboard-accessible internal scrolling; short
+  prompts use their natural height. Copy still uses the full unchanged prompt,
+  and search reveals matches below the viewport.
+- Hide/Show sessions preserves selection, filters, pagination, and list scroll.
+  Search and source/state/model/date filters live in the shown left pane;
+  icon buttons reveal labeled filter controls, with chips for active values.
+  Above 900 CSS pixels the list and details scroll independently; narrower
+  screens use stacked document flow. Session information and usage expand
+  together; title, observed state, freshness warnings, and coverage indicators
+  remain visible when collapsed.
+- Pane/expander and Conversation display settings survive session switching
+  and live updates within the mounted Sessions page, but reset on reload or
+  tab remount. Existing search/filter/selection URL state is unchanged.
 - Activity is observed events and counts, not a percent-complete estimate or a
   guarantee that a tool is currently running. Source time, dashboard observation
   time, connection status, and observations older than 30 seconds are visible.

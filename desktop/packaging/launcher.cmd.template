@@ -1,0 +1,1 @@
+@start "" /min "%~dp0runtime\dotnet.exe" "%~dp0CopilotSessionDashboard.dll"
