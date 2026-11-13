@@ -8,6 +8,14 @@ export function App() {
   const [view, setView] = useState(
     new URLSearchParams(window.location.search).get('view') ?? 'sessions',
   );
+  const [connected, setConnected] = useState(false);
+  const descriptions: Record<string, string> = {
+    sessions: 'Trace the work. Find the prompt. Understand the usage.',
+    usage:
+      'Recorded usage across matching sessions. No currency estimates or guessed billing conversions.',
+    sources:
+      'Choose what this machine reads. Nothing is enabled automatically.',
+  };
   return (
     <>
       <header className="app-header">
@@ -20,6 +28,7 @@ export function App() {
               key={name}
               aria-current={view === name ? 'page' : undefined}
               onClick={() => {
+                if (name !== view) setConnected(false);
                 setView(name);
                 const url = new URL(window.location.href);
                 url.searchParams.set('view', name);
@@ -34,7 +43,14 @@ export function App() {
             </button>
           ))}
         </nav>
-        <span className="local-label">On this machine</span>
+        <p className="tab-description">
+          {descriptions[view] ?? descriptions.sessions}
+        </p>
+        {view === 'sessions' && (
+          <span className={`connection ${connected ? 'connected' : ''}`}>
+            {connected ? 'Live updates connected' : 'Live updates disconnected'}
+          </span>
+        )}
       </header>
       <main>
         {view === 'sources' ? (
@@ -42,7 +58,7 @@ export function App() {
         ) : view === 'usage' ? (
           <UsagePage />
         ) : (
-          <SessionsPage />
+          <SessionsPage onConnectionChange={setConnected} />
         )}
       </main>
     </>

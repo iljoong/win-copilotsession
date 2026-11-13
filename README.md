@@ -190,9 +190,18 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
   at most ten wrapped lines with keyboard-accessible internal scrolling; short
   prompts use their natural height. Copy still uses the full unchanged prompt,
   and search reveals matches below the viewport.
-- Hide/Show sessions preserves selection, filters, pagination, and list scroll.
-  Search and source/state/model/date filters live in the shown left pane;
-  icon buttons reveal labeled filter controls, with chips for active values.
+- The active tab's explanation appears beside navigation, without a duplicate
+  page title below it. Live connection status appears in the header on Sessions
+  only; Usage and Sources retain their existing refresh behavior.
+- The sidebar icon at the upper-left of the right session panel hides/shows
+  the list while preserving selection, filters, pagination, and list scroll.
+  It stays reachable while scrolling. The selected state/scope and stale-observation
+  message share the icon's toolbar, wrapping when necessary. Search and
+  source/state/model/date filters
+  are inside the left pane's **Search and filters** expander, collapsed by default;
+  its summary shows the active filter count even while closed. Expanding reveals
+  icon-led labeled filter controls and removable chips. Collapsing closes any
+  nested editor without clearing filters.
   Above 900 CSS pixels the list and details scroll independently; narrower
   screens use stacked document flow. Session information and usage expand
   together; title, observed state, freshness warnings, and coverage indicators

@@ -71,8 +71,8 @@ function cliEvent(id: string, content: string) {
 test('loads sessions without token in URL', async ({ desktop }) => {
   const { page } = desktop;
   await expect(
-    page.getByRole('heading', { name: 'Sessions', exact: true }),
-  ).toBeVisible();
+    page.getByRole('button', { name: 'Sessions', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
   expect(page.url()).toMatch(loopback);
   expect(page.url()).not.toContain('token=');
   expect(
@@ -83,6 +83,7 @@ test('loads sessions without token in URL', async ({ desktop }) => {
 test('search finds fixture prompt', async ({ desktop }) => {
   const { page } = desktop;
   await importViaFileChooser(page);
+  await page.locator('details.session-search > summary').click();
   const search = page.getByRole('searchbox', {
     name: 'Search original prompts',
   });
@@ -110,6 +111,20 @@ test('copy prompt keeps exact text', async ({ desktop }) => {
 test('conversation focused layout in WebView2', async ({ desktop }) => {
   const { page } = desktop;
   await importViaFileChooser(page);
+  const header = page.locator('.app-header');
+  await expect(
+    header.getByText('Live updates connected', { exact: true }),
+  ).toBeVisible();
+  await expect(header.locator('.tab-description')).toContainText(
+    'Find the prompt',
+  );
+  await expect(page.locator('main h1')).toHaveCount(0);
+  await expect(page.getByText('On this machine')).toHaveCount(0);
+  const search = page.locator('details.session-search');
+  await expect(search).not.toHaveAttribute('open', '');
+  await expect(page.getByRole('searchbox')).not.toBeVisible();
+  await search.locator('summary').focus();
+  await search.locator('summary').press('Enter');
   const overview = page.locator('details.session-overview');
   await expect(overview).not.toHaveAttribute('open', '');
   await expect(
@@ -124,6 +139,11 @@ test('conversation focused layout in WebView2', async ({ desktop }) => {
   ).toBeVisible();
   await expect(overview.locator('details')).toHaveCount(0);
   await overview.locator('summary').click();
+  const toggle = page
+    .locator('.session-detail')
+    .getByRole('button', { name: 'Hide sessions', exact: true });
+  await expect(toggle).toHaveText('');
+  await expect(toggle.locator('svg')).toHaveCount(1);
   await page.getByRole('button', { name: 'Source', exact: true }).click();
   await page
     .getByRole('radio', { name: 'VS Code import', exact: true })
@@ -141,6 +161,8 @@ test('conversation focused layout in WebView2', async ({ desktop }) => {
     before + 300,
   );
   await page.getByRole('button', { name: /^Show sessions/ }).click();
+  await expect(search).toHaveAttribute('open', '');
+  await expect(search.locator('summary')).toContainText('1 filter');
   await expect(
     page.getByRole('button', { name: 'Hide sessions', exact: true }),
   ).toBeFocused();
@@ -163,6 +185,40 @@ test('conversation focused layout in WebView2', async ({ desktop }) => {
     .getByRole('button', { name: /^Copy prompt/ })
     .click();
   await expect.poll(readClipboard).toBe(prompt);
+  await search.locator('summary').click();
+  for (const width of [640, 320]) {
+    await page.setViewportSize({ width, height: 600 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.evaluate(() =>
+      window.scrollTo(
+        0,
+        document.querySelector('.session-detail')!.getBoundingClientRect().top +
+          scrollY +
+          120,
+      ),
+    );
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+    await expect(toggle).toBeInViewport();
+    await page.evaluate(() => window.scrollTo(0, 0));
+  }
+  await page.getByRole('button', { name: 'Usage', exact: true }).click();
+  await expect(header.locator('.tab-description')).toContainText(
+    'Recorded usage',
+  );
+  await expect(
+    page.getByText(/Live updates (connected|disconnected)/),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: 'Sources', exact: true }).click();
+  await expect(header.locator('.tab-description')).toContainText(
+    'Nothing is enabled automatically',
+  );
+  await expect(
+    page.getByText(/Live updates (connected|disconnected)/),
+  ).toHaveCount(0);
 });
 
 test('imports VS Code JSON via file chooser', async ({ desktop }) => {
@@ -249,8 +305,8 @@ test('blocks navigation to external origin', async ({ desktop }) => {
   expect(new URL(page.url()).origin).toBe(before);
   expect(page.url()).toMatch(loopback);
   await expect(
-    page.getByRole('heading', { name: 'Sessions', exact: true }),
-  ).toBeVisible();
+    page.getByRole('button', { name: 'Sessions', exact: true }),
+  ).toHaveAttribute('aria-current', 'page');
 });
 
 test('closing window leaves no node.exe under the staged folder within 5 seconds', async ({

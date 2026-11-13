@@ -84,14 +84,6 @@ export function SourcesPage() {
   }
   return (
     <section className="settings-page">
-      <div className="page-heading">
-        <div>
-          <h1>Sources</h1>
-          <p>
-            Choose what this machine reads. Nothing is enabled automatically.
-          </p>
-        </div>
-      </div>
       {info?.privacyWarning && (
         <p role="alert" className="warning">
           {info.privacyWarning}

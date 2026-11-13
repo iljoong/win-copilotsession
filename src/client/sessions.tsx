@@ -167,7 +167,11 @@ function Pagination({
   );
 }
 
-export function SessionsPage() {
+export function SessionsPage({
+  onConnectionChange,
+}: {
+  onConnectionChange?: (connected: boolean) => void;
+} = {}) {
   const initial = new URLSearchParams(window.location.search);
   const [query, setQuery] = useState(initial.get('q') ?? '');
   const [source, setSource] = useState(initial.get('source') ?? '');
@@ -184,6 +188,7 @@ export function SessionsPage() {
   const [entryOrder, setEntryOrder] = useState<'asc' | 'desc'>('desc');
   const [overviewOpen, setOverviewOpen] = useState(false);
   const [filterEditor, setFilterEditor] = useState<FilterEditor | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [listVisible, setListVisible] = useState(true);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const listRowsRef = useRef<HTMLDivElement>(null);
@@ -199,7 +204,6 @@ export function SessionsPage() {
   const [detailError, setDetailError] = useState('');
   const [notice, setNotice] = useState('');
   const [version, setVersion] = useState(0);
-  const [connected, setConnected] = useState(false);
   const [now, setNow] = useState(Date.now());
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
@@ -231,15 +235,20 @@ export function SessionsPage() {
       observer?.disconnect();
     };
   }, []);
-  useEffect(
-    () =>
-      subscribeChanges(
-        () => setVersion((v) => v + 1),
-        () => setVersion((v) => v + 1),
-        setConnected,
-      ),
-    [],
-  );
+  useEffect(() => {
+    let active = true;
+    const stop = subscribeChanges(
+      () => setVersion((v) => v + 1),
+      () => setVersion((v) => v + 1),
+      (connected) => {
+        if (active) onConnectionChange?.(connected);
+      },
+    );
+    return () => {
+      active = false;
+      stop();
+    };
+  }, [onConnectionChange]);
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -585,6 +594,9 @@ export function SessionsPage() {
       )}
     </form>
   );
+  const toggleLabel = listVisible
+    ? 'Hide sessions'
+    : `Show sessions${activeFilters.length ? ` (${activeFilters.length} ${activeFilters.length === 1 ? 'filter' : 'filters'})` : ''}`;
   async function copyPrompt(value: string) {
     try {
       if (!navigator.clipboard?.writeText)
@@ -599,39 +611,11 @@ export function SessionsPage() {
   }
   return (
     <section className="sessions-page">
-      <div className="page-heading">
-        <div>
-          <h1>Sessions</h1>
-          <p>Trace the work. Find the prompt. Understand the usage.</p>
-        </div>
-        <span className={`connection ${connected ? 'connected' : ''}`}>
-          {connected ? 'Live updates connected' : 'Live updates disconnected'}
-        </span>
-      </div>
       {error && (
         <p role="alert" className="error">
           {error}
         </p>
       )}
-      <div className="session-detail-toolbar">
-        <button
-          type="button"
-          ref={listToggleRef}
-          aria-controls="session-list"
-          aria-expanded={listVisible}
-          onClick={() => {
-            if (listVisible)
-              listScroll.current = listRowsRef.current?.scrollTop ?? 0;
-            setFilterEditor(null);
-            toggledList.current = true;
-            setListVisible(!listVisible);
-          }}
-        >
-          {listVisible
-            ? 'Hide sessions'
-            : `Show sessions${activeFilters.length ? ` (${activeFilters.length} ${activeFilters.length === 1 ? 'filter' : 'filters'})` : ''}`}
-        </button>
-      </div>
       <div
         ref={workspaceRef}
         className={`workspace${listVisible ? '' : ' workspace-list-hidden'}`}
@@ -646,7 +630,22 @@ export function SessionsPage() {
             <div className="list-heading">
               {page ? `${page.total} sessions` : 'Loading sessions…'}
             </div>
-            {filters}
+            <details
+              className="session-search"
+              open={filtersOpen}
+              onToggle={(event) => {
+                setFiltersOpen(event.currentTarget.open);
+                if (!event.currentTarget.open) setFilterEditor(null);
+              }}
+            >
+              <summary>
+                Search and filters
+                {activeFilters.length
+                  ? ` (${activeFilters.length} ${activeFilters.length === 1 ? 'filter' : 'filters'})`
+                  : ''}
+              </summary>
+              {filters}
+            </details>
           </div>
           <div className="session-list-rows" ref={listRowsRef}>
             {page?.items.map((item) => (
@@ -718,6 +717,54 @@ export function SessionsPage() {
           )}
         </aside>
         <div className="session-detail" aria-label="Selected session">
+          <div className="session-detail-toolbar">
+            <button
+              type="button"
+              ref={listToggleRef}
+              aria-label={toggleLabel}
+              title={toggleLabel}
+              aria-controls="session-list"
+              aria-expanded={listVisible}
+              onClick={() => {
+                if (listVisible)
+                  listScroll.current = listRowsRef.current?.scrollTop ?? 0;
+                setFilterEditor(null);
+                toggledList.current = true;
+                setListVisible(!listVisible);
+              }}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <path d="M9 4v16" />
+                <path d={listVisible ? 'm7 10-2 2 2 2' : 'm5 10 2 2-2 2'} />
+              </svg>
+            </button>
+            {summary && (
+              <div className="session-status">
+                <p>
+                  {summary.snapshot
+                    ? 'Imported snapshot'
+                    : stateNames[summary.state]}
+                  {summary.stateScope === 'turn' ? ' — turn scope' : ''}
+                </p>
+                {!summary.snapshot && now - summary.observedAt > 30000 && (
+                  <p className="warning">
+                    Observation stale: no new records for 30s or more. Long
+                    operations may be silent.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
           {detailError && (
             <p role="alert" className="error">
               {detailError}
@@ -739,18 +786,6 @@ export function SessionsPage() {
             <>
               <header className="detail-heading">
                 <h2>{summary.title}</h2>
-                <p>
-                  {summary.snapshot
-                    ? 'Imported snapshot'
-                    : stateNames[summary.state]}
-                  {summary.stateScope === 'turn' ? ' — turn scope' : ''}
-                </p>
-                {!summary.snapshot && now - summary.observedAt > 30000 && (
-                  <p className="warning">
-                    Observation stale: no new records for 30s or more. Long
-                    operations may be silent.
-                  </p>
-                )}
               </header>
               <details
                 className="session-overview"

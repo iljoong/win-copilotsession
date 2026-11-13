@@ -32,7 +32,6 @@ export function UsagePage() {
   const [to, setTo] = useState(initial.get('to') ?? '');
   const [report, setReport] = useState<UsageReport | null>(null);
   const [version, setVersion] = useState(0);
-  const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   useEffect(
@@ -40,7 +39,6 @@ export function UsagePage() {
       subscribeChanges(
         () => setVersion((v) => v + 1),
         () => setVersion((v) => v + 1),
-        setConnected,
       ),
     [],
   );
@@ -81,18 +79,6 @@ export function UsagePage() {
   }, [source, model, from, to, version]);
   return (
     <section className="usage-page">
-      <div className="page-heading">
-        <div>
-          <h1>Usage</h1>
-          <p>
-            Recorded usage across matching sessions. No currency estimates or
-            guessed billing conversions.
-          </p>
-        </div>
-        <span className={`connection ${connected ? 'connected' : ''}`}>
-          {connected ? 'Live updates connected' : 'Live updates disconnected'}
-        </span>
-      </div>
       <form
         className="filters usage-filters"
         onSubmit={(event) => event.preventDefault()}

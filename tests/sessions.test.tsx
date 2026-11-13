@@ -20,6 +20,61 @@ afterEach(async () => {
   cleanup();
   await harness.close();
 });
+test('searchExpanderDefaultsCollapsedAndRetainsFilters', async () => {
+  const user = userEvent.setup();
+  harness.store.commitBatch({
+    records: [
+      harness.entry('a', 'Alpha one', { timestamp: 2000 }),
+      harness.entry('b', 'Alpha two'),
+    ],
+    warnings: [],
+  });
+  render(<SessionsPage />);
+  const summary = screen.getByText(/^Search and filters/);
+  expect(summary.closest('details')).not.toHaveAttribute('open');
+  expect(screen.getByRole('searchbox')).not.toBeVisible();
+  await user.click(summary);
+  await user.type(
+    screen.getByRole('searchbox', { name: 'Search original prompts' }),
+    'Alpha',
+  );
+  await user.click(screen.getByRole('button', { name: 'Source' }));
+  await user.click(summary);
+  expect(summary).toHaveTextContent('1 filter');
+  expect(screen.getByRole('searchbox')).not.toBeVisible();
+  await user.click(
+    await screen.findByRole('button', { name: 'Open Alpha two' }),
+  );
+  await screen.findByRole('heading', { name: 'Alpha two' });
+  await user.click(screen.getByRole('button', { name: 'Hide sessions' }));
+  await user.click(screen.getByRole('button', { name: /^Show sessions/ }));
+  expect(summary.closest('details')).not.toHaveAttribute('open');
+  await user.click(summary);
+  expect(screen.getByRole('searchbox')).toHaveValue('Alpha');
+  expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
+  await user.click(screen.getByRole('button', { name: 'Hide sessions' }));
+  await user.click(screen.getByRole('button', { name: /^Show sessions/ }));
+  expect(summary.closest('details')).toHaveAttribute('open');
+  expect(new URLSearchParams(window.location.search).get('q')).toBe('Alpha');
+});
+test('sidebarToggleIsAnIconInsideTheDetailPanelWithoutSelection', async () => {
+  const user = userEvent.setup();
+  render(<SessionsPage />);
+  await screen.findByRole('heading', { name: 'No matching sessions' });
+  const button = screen.getByRole('button', { name: 'Hide sessions' });
+  expect(screen.getByLabelText('Selected session').contains(button)).toBe(true);
+  expect(button.textContent).toBe('');
+  expect(button.querySelector('svg')).not.toBeNull();
+  await user.click(button);
+  const restore = screen.getByRole('button', { name: /^Show sessions/ });
+  expect(restore).toHaveFocus();
+  expect(screen.getByLabelText('Selected session').contains(restore)).toBe(
+    true,
+  );
+});
 test('combinedOverviewShowsInformationAndUsageTogether', async () => {
   const user = userEvent.setup();
   harness.store.commitBatch({
@@ -48,6 +103,7 @@ test('combinedOverviewShowsInformationAndUsageTogether', async () => {
   expect(within(overview).getByText('Session usage')).not.toBeVisible();
 });
 test('closedOverviewKeepsStateAndWarningsVisible', async () => {
+  const user = userEvent.setup();
   harness.store.commitBatch({
     records: [
       harness.entry('a', 'Stale turn'),
@@ -67,6 +123,16 @@ test('closedOverviewKeepsStateAndWarningsVisible', async () => {
   expect(screen.getByText(/Observation stale/)).toBeVisible();
   expect(overview.contains(screen.getByText(/Observation stale/))).toBe(false);
   expect(screen.getByText(/— turn scope/)).toBeVisible();
+  const toolbar = screen.getByRole('button', {
+    name: 'Hide sessions',
+  }).parentElement!;
+  expect(
+    within(toolbar).getByText('Active (observed) — turn scope'),
+  ).toBeVisible();
+  expect(within(toolbar).getByText(/Observation stale/)).toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Hide sessions' }));
+  expect(within(toolbar).getByText(/Observation stale/)).toBeVisible();
+  await user.click(screen.getByRole('button', { name: /^Show sessions/ }));
   expect(within(overview).getAllByText('Unavailable')[0]).not.toBeVisible();
 });
 test('sidebarFiltersPreserveQueriesAndClearGroups', async () => {
@@ -78,6 +144,7 @@ test('sidebarFiltersPreserveQueriesAndClearGroups', async () => {
   render(<SessionsPage />);
   await screen.findByRole('article', { name: /^Original prompt/ });
   const sidebar = screen.getByRole('complementary', { name: 'Session list' });
+  await user.click(screen.getByText(/^Search and filters/));
   const search = screen.getByRole('searchbox', {
     name: 'Search original prompts',
   });
@@ -103,6 +170,7 @@ test('sidebarFiltersPreserveQueriesAndClearGroups', async () => {
 test('filterEditorsHaveExclusiveKeyboardDisclosure', async () => {
   const user = userEvent.setup();
   render(<SessionsPage />);
+  await user.click(screen.getByText(/^Search and filters/));
   const source = screen.getByRole('button', { name: 'Source' });
   await user.click(source);
   expect(screen.getAllByRole('radio')).toHaveLength(5);
@@ -168,11 +236,12 @@ test('restoreAvailableWithoutSelectionOrWithEditor', async () => {
   const user = userEvent.setup();
   render(<SessionsPage />);
   await screen.findByRole('heading', { name: 'No matching sessions' });
+  await user.click(screen.getByText(/^Search and filters/));
   await user.click(screen.getByRole('button', { name: 'Source' }));
   await user.click(screen.getByRole('radio', { name: 'CLI history' }));
   await user.click(screen.getByRole('button', { name: 'Hide sessions' }));
   const show = screen.getByRole('button', { name: /^Show sessions/ });
-  expect(show).toHaveTextContent('1 filter');
+  expect(show).toHaveAccessibleName('Show sessions (1 filter)');
   await user.click(show);
   expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute(
     'aria-expanded',
@@ -266,6 +335,7 @@ test('searchOpensMatchingPromptBeyondFirstPage', async () => {
   });
   render(<SessionsPage />);
   await screen.findByRole('article', { name: 'Original prompt 1' });
+  await user.click(screen.getByText(/^Search and filters/));
   await user.type(
     screen.getByRole('searchbox', { name: 'Search original prompts' }),
     'needle',
@@ -396,6 +466,7 @@ test('filteredSearchOffsetsFollowTheSelectedConversationPageSize', async () => {
       name: 'Ascending (oldest first)',
     }),
   );
+  await user.click(screen.getByText(/^Search and filters/));
   await user.type(
     screen.getByRole('searchbox', { name: 'Search original prompts' }),
     'needle',

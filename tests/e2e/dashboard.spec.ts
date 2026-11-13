@@ -42,6 +42,168 @@ async function enableSource(
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Live updates connected')).toBeVisible();
 }
+test('compactHeaderSearchExpanderAndStickyPanelIcon', async ({
+  page,
+  app,
+}, info) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(app.origin);
+  await importChat(page, {
+    ...exported,
+    requests: Array.from({ length: 40 }, (_, n) => ({
+      requestId: `compact-${n}`,
+      message: `Prompt ${n}`,
+      modelId: 'gpt-fixture',
+      response: [{ value: 'Assistant preview '.repeat(20) }],
+    })),
+  });
+  const header = page.locator('.app-header');
+  await expect(
+    header.getByText('Live updates connected', { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('main h1')).toHaveCount(0);
+  await expect(
+    header.getByText('Trace the work. Find the prompt. Understand the usage.'),
+  ).toBeVisible();
+  await expect(page.getByText('On this machine')).toHaveCount(0);
+  const search = page.locator('details.session-search');
+  await expect(search).not.toHaveAttribute('open', '');
+  await expect(page.getByRole('searchbox')).not.toBeVisible();
+  await page.screenshot({
+    path: info.outputPath('compact-header-desktop.png'),
+  });
+  await search.locator('summary').focus();
+  await search.locator('summary').press('Enter');
+  await page.getByRole('searchbox').fill('Prompt');
+  await expect(search.locator('summary')).toContainText('1 filter');
+  const detail = page.locator('.session-detail');
+  await detail.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  const icon = detail.getByRole('button', {
+    name: 'Hide sessions',
+    exact: true,
+  });
+  await expect(icon).toHaveText('');
+  await expect(icon.locator('svg')).toHaveCount(1);
+  const iconBox = await icon.boundingBox();
+  const detailBox = await detail.boundingBox();
+  expect(iconBox!.y).toBeGreaterThanOrEqual(detailBox!.y);
+  expect(iconBox!.y).toBeLessThan(detailBox!.y + 48);
+  await icon.click();
+  await detail.getByRole('button', { name: /^Show sessions/ }).click();
+  await expect(search).toHaveAttribute('open', '');
+  await expect(page.getByRole('searchbox')).toHaveValue('Prompt');
+  await search.locator('summary').click();
+  await expect(page.getByRole('searchbox')).not.toBeVisible();
+  for (const width of [640, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await expect(
+      header.getByText('Live updates connected', { exact: true }),
+    ).toBeVisible();
+    await expect(header.locator('.tab-description')).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 1000));
+    expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
+    await expect(icon).toBeInViewport();
+    await icon.click();
+    await detail.getByRole('button', { name: /^Show sessions/ }).click();
+    await expect(icon).toBeInViewport();
+    await page.evaluate(() => window.scrollTo(0, 0));
+  }
+  await page.screenshot({ path: info.outputPath('compact-header-narrow.png') });
+  await page.getByRole('button', { name: 'Usage', exact: true }).click();
+  await expect(header.locator('.tab-description')).toContainText(
+    'Recorded usage',
+  );
+  await expect(
+    page.getByText(/Live updates (connected|disconnected)/),
+  ).toHaveCount(0);
+  await page.getByRole('button', { name: 'Sources', exact: true }).click();
+  await expect(header.locator('.tab-description')).toContainText(
+    'Nothing is enabled automatically',
+  );
+  await expect(
+    page.getByText(/Live updates (connected|disconnected)/),
+  ).toHaveCount(0);
+});
+test('sessionStatusSharesSidebarToolbarAndWraps', async ({
+  page,
+  app,
+}, info) => {
+  const history = join(dirname(app.telemetryPath), 'inline-status-history');
+  await mkdir(join(history, 'synthetic-session'), { recursive: true });
+  await writeFile(
+    join(history, 'synthetic-session', 'events.jsonl'),
+    [
+      {
+        id: 'prompt',
+        type: 'user.message',
+        timestamp: 1000,
+        data: { content: 'Inline status fixture' },
+      },
+      {
+        id: 'turn',
+        type: 'assistant.turn_start',
+        timestamp: 1001,
+        data: { turnId: 'synthetic-turn' },
+      },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join('\n') + '\n',
+  );
+  await page.clock.setFixedTime(new Date(Date.now() + 60000));
+  await page.setViewportSize({ width: 1600, height: 800 });
+  await page.goto(app.origin);
+  await enableSource(page, history, 'cli-history');
+  const toolbar = page.locator('.session-detail-toolbar');
+  const icon = toolbar.getByRole('button', {
+    name: 'Hide sessions',
+    exact: true,
+  });
+  const state = toolbar.getByText('Active (observed) — turn scope', {
+    exact: true,
+  });
+  const warning = toolbar.getByText(
+    'Observation stale: no new records for 30s or more. Long operations may be silent.',
+    { exact: true },
+  );
+  await expect(state).toBeVisible();
+  await expect(warning).toBeVisible();
+  const iconBox = (await icon.boundingBox())!;
+  const stateBox = (await state.boundingBox())!;
+  const warningBox = (await warning.boundingBox())!;
+  expect(stateBox.x).toBeGreaterThan(iconBox.x + iconBox.width);
+  expect(warningBox.x).toBeGreaterThan(stateBox.x + stateBox.width);
+  expect(
+    Math.abs(stateBox.y + stateBox.height / 2 - iconBox.y - iconBox.height / 2),
+  ).toBeLessThan(3);
+  expect(Math.abs(warningBox.y - stateBox.y)).toBeLessThan(3);
+  await page.screenshot({ path: info.outputPath('inline-status-desktop.png') });
+  await icon.click();
+  await expect(state).toBeVisible();
+  await expect(warning).toBeVisible();
+  await toolbar.getByRole('button', { name: /^Show sessions/ }).click();
+  await page.setViewportSize({ width: 320, height: 800 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await expect(state).toBeVisible();
+  await expect(warning).toBeVisible();
+  await expect(
+    page.getByText('Active (observed) — turn scope', { exact: true }),
+  ).toHaveCount(1);
+  await page.screenshot({
+    path: info.outputPath('inline-status-narrow.png'),
+    fullPage: true,
+  });
+});
 test('conversationPaneVisibilityAndResponsiveLayout', async ({ page, app }) => {
   const history = join(dirname(app.telemetryPath), 'pane-fixture-history');
   await Promise.all(
@@ -98,6 +260,7 @@ test('conversationPaneVisibilityAndResponsiveLayout', async ({ page, app }) => {
   await page.getByRole('button', { name: /^Show sessions/ }).click();
   await expect(pages).toContainText('51–55 of 55');
   expect(new URL(page.url()).searchParams.get('session')).toBe(selection);
+  await page.locator('details.session-search > summary').click();
   await page.getByRole('button', { name: 'Source', exact: true }).click();
   await page.getByRole('radio', { name: 'CLI history', exact: true }).check();
   await expect(pages).toContainText('1–50 of 55');
@@ -232,6 +395,7 @@ test('searchRevealsLaterMatchWithoutRefreshScrollReset', async ({
   await page
     .getByText('Session information and usage', { exact: true })
     .click();
+  await page.locator('details.session-search > summary').click();
   await page
     .getByRole('searchbox', { name: 'Search original prompts' })
     .fill('cafe needle');
@@ -269,6 +433,7 @@ test('searchRevealsLaterMatchWithoutRefreshScrollReset', async ({
   await refreshed;
   await expect.poll(() => promptBody.evaluate((el) => el.scrollTop)).toBe(0);
   await expect(page.locator('.session-overview')).toHaveAttribute('open', '');
+  await expect(page.locator('.session-search')).toHaveAttribute('open', '');
 });
 test('searchRevealsGreekFinalSigmaMatch', async ({ page, app }) => {
   const full = 'Context\r\n'.repeat(14) + 'ΚΟΣΜΟΣ\r\nFinal line';
@@ -286,6 +451,7 @@ test('searchRevealsGreekFinalSigmaMatch', async ({ page, app }) => {
       },
     ],
   });
+  await page.locator('details.session-search > summary').click();
   await page
     .getByRole('searchbox', { name: 'Search original prompts' })
     .fill('ΚΟΣΜΟΣ');
@@ -354,6 +520,7 @@ test('importSearchCopyFiltersAndSafePreviews', async ({ page, app }, info) => {
   await expect(preview).toContainText('<img src=x onerror=alert(1)>');
   expect(Array.from((await preview.textContent()) ?? '')).toHaveLength(1000);
   await expect(page.locator('img')).toHaveCount(0);
+  await page.locator('details.session-search > summary').click();
   await page
     .getByRole('searchbox', { name: 'Search original prompts' })
     .fill('findneedle');
@@ -659,8 +826,8 @@ test('developmentUsesOnlyAuthenticatedLoopbackListener', async ({
     ]);
     await page.goto(app.origin);
     await expect(
-      page.getByRole('heading', { name: 'Sessions', exact: true }),
-    ).toBeVisible();
+      page.getByRole('button', { name: 'Sessions', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
     expect((await fetch(app.origin)).status).toBe(401);
   } finally {
     await app.close();

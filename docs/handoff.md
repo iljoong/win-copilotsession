@@ -85,10 +85,22 @@ restart unless the development watcher handles it.
   is implemented. Search and compact icon disclosures for filters live in the
   320px sidebar; source/state editors use radios, model stays free text, and
   dates retain native inputs. Active filter chips are removable; sort uses icons.
-- A single Hide/Show control before the workspace keeps selection, filters,
-  both pagination offsets, and list scroll intact. Desktop list/detail panes
-  scroll independently; <=900px uses stacked document flow with the toggle
-  reachable before the list. Navigation wraps below 480px to avoid 320px overflow.
+- The approved [compact header/sidebar follow-up](superpowers/specs/2026-11-13-compact-header-sidebar-controls-design.md)
+  removes duplicate page titles/descriptions. The active tab's explanation is
+  beside navigation; connection status appears there on Sessions only, forwarded
+  from its existing stream, with late unmounted callbacks ignored.
+- One icon-only Hide/Show button inside the right Selected session panel keeps
+  selection, filters, both pagination offsets, and list scroll intact. Its
+  toolbar stays reachable when scrolling, including <=900px stacked document
+  flow. Selected state/scope, snapshot label, and the unchanged stale-observation
+  message share the icon's toolbar instead of separate rows below it; they wrap
+  without truncation on narrow screens. Desktop list/detail panes scroll independently. The stacked workspace
+  uses `overflow: clip` rather than a sticky-trapping scroll container.
+  Navigation, descriptions, and status wrap without 320px overflow.
+- Search/filter/sort/chip controls share a Search and filters expander,
+  collapsed by default. Its summary keeps the active filter count visible;
+  closing clears only the nested editor, not query values or selection.
+  Expansion survives session changes, SSE refresh, and Hide/Show.
 - Session information and all eight usage fields share one native
   collapsed-by-default expander. Title/state/scope, stale observations, and
   coverage warning counts remain outside; expansion survives session changes
@@ -295,6 +307,51 @@ Refresh browser mode after rebuilding, or relaunch the updated portable package.
 The user authorized in-place implementation on `main`, then approved publishing
 the previously unpushed desktop work and this UI work as one squash commit.
 No shared process was restarted and no real history was inspected.
+
+### Compact header/sidebar follow-up verification (2026-11-13)
+
+The follow-up passed 124 unit/integration tests, 12 rebuilt production
+Chromium workflows, 57 shell tests, and nine WebView2 workflows. Typecheck, ESLint,
+C# formatting, and Release packaging passed. Packaging's pinned-runtime subset
+passed 94 tests. Both browser engines cover collapsed search, the in-panel icon,
+keyboard controls, header descriptions/status, and 640/320px overflow/scrolling.
+Desktop/narrow synthetic screenshots were inspected.
+
+Final review identified a narrow-screen sticky toolbar trapped by the workspace's
+`overflow: hidden`. A page-scroll regression failed before changing only the
+stacked workspace to `overflow: clip`, then passed, including Hide/Show after
+scrolling. Existing query, pagination, prompt fidelity, consent, accounting,
+and live refresh regressions remain green.
+
+The first Release Defender smoke timed out waiting 60.1 seconds for initial
+backend readiness, with no shell log and zero Defender events. Both extracted
+runtimes were present and no matching application crash event was found.
+The same zip and unchanged smoke command subsequently passed: cold/warm starts
+8.17/1.56 seconds, no console windows, no staged Node after close/kill, zero
+1116/1117/1121/1122 events, and disposable data/process cleanup completed.
+The initial timeout's cause remains unconfirmed; no startup or security-setting
+change is claimed.
+
+Standard `npm run format:check` still reports 59 unrelated line-ending files.
+All changed files pass the standard formatter; the repository passes
+`npx prettier --check --end-of-line auto .`. Referenced local Markdown paths exist.
+
+The updated local Release zip remains
+`desktop\artifacts\CopilotSessionDashboard-0.1.0-win-x64.zip`.
+Refresh browser mode or relaunch the updated portable package to use this UI.
+The user subsequently authorized committing and pushing this follow-up together
+with the inline-status refinement. No shared process was restarted and no real
+history was inspected.
+
+The subsequent approved inline-status refinement puts state/scope and the
+unchanged stale warning beside the icon, keeping snapshot/freshness conditions
+and title intact. Wide alignment and 320px full-message wrapping were checked
+with synthetic screenshots. Revalidation passed 124 unit tests, 13 Chromium
+workflows, 57 shell tests, nine WebView2 workflows, static/C# formatting checks,
+and updated Release packaging. Its Defender smoke passed on the first attempt
+(cold/warm 4.80/1.57 seconds, zero events, complete cleanup). The existing
+59 unrelated CRLF formatter warnings remain. Git history and remote tracking
+identify the published handoff.
 
 ## Publishing this handoff
 

@@ -98,8 +98,9 @@ small {
 .app-header {
   display: flex;
   align-items: center;
-  gap: 35px;
-  padding: 0 30px;
+  gap: 12px 24px;
+  flex-wrap: wrap;
+  padding: 10px 30px;
   border-bottom: 1px solid var(--rule);
   min-height: 64px;
 }
@@ -114,6 +115,7 @@ small {
   display: flex;
   gap: 8px;
   align-self: stretch;
+  min-height: 42px;
 }
 .app-header nav button {
   background: transparent;
@@ -126,8 +128,11 @@ small {
   color: white;
   border-bottom-color: var(--signal);
 }
-.local-label {
-  margin-left: auto;
+.tab-description {
+  flex: 1 1 220px;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
   font-size: 12px;
   color: var(--muted);
 }
@@ -136,22 +141,10 @@ main {
   margin: auto;
   padding: 27px 30px;
 }
-.page-heading {
-  display: flex;
-  justify-content: space-between;
-  gap: 20px;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-.page-heading p {
-  color: var(--muted);
-  font-size: 14px;
-  margin-bottom: 0;
-}
 .connection {
   font-size: 12px;
   color: var(--muted);
-  margin-top: 9px;
+  margin-left: auto;
   white-space: nowrap;
 }
 .connection::before {
@@ -190,10 +183,48 @@ main {
   grid-template-columns: minmax(0, 1fr);
 }
 .session-detail-toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel);
+  padding: 2px 0;
   margin-bottom: 12px;
 }
 .session-detail-toolbar button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+.session-status {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  min-width: 0;
+  min-height: 36px;
+}
+.session-status p {
+  margin: 0;
+  max-width: none;
   font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.session-status .warning {
+  flex: 1 1 320px;
+}
+.session-search > summary {
+  padding: 12px 14px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--rule);
 }
 .session-list {
   border-right: 1px solid var(--rule);
@@ -758,6 +789,7 @@ td {
   .sessions-page .workspace {
     grid-template-columns: 1fr;
     height: auto;
+    overflow: clip;
   }
   .sessions-page .session-list {
     border-right: 0;
@@ -779,25 +811,9 @@ td {
   main {
     padding: 20px 14px;
   }
-  @media (max-width: 480px) {
-    .app-header {
-      flex-wrap: wrap;
-      gap: 0;
-    }
-    .wordmark {
-      padding: 12px 0;
-    }
-    .app-header nav {
-      flex-basis: 100%;
-      min-height: 46px;
-    }
-  }
   .app-header {
-    padding: 0 15px;
-    gap: 15px;
-  }
-  .local-label {
-    display: none;
+    padding: 10px 15px;
+    gap: 10px 15px;
   }
   .settings-grid {
     grid-template-columns: 1fr;
@@ -808,11 +824,25 @@ td {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .page-heading {
-    flex-wrap: wrap;
-    gap: 5px;
-  }
   .settings-section {
     padding: 19px;
+  }
+}
+@media (max-width: 480px) {
+  .app-header {
+    gap: 8px 0;
+  }
+  .wordmark {
+    padding: 4px 0;
+  }
+  .app-header nav {
+    flex-basis: 100%;
+    min-height: 46px;
+  }
+  .tab-description {
+    flex-basis: 100%;
+  }
+  .connection {
+    margin-left: 0;
   }
 }
