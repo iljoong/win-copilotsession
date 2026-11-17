@@ -43,7 +43,8 @@ The exact staged LF snapshot passes standard Prettier and C# formatting without
 normalizing unrelated CRLF files. Defender reported zero events and complete
 cleanup (8.60-second cold / 1.33-second warm startup). The 113,388,595-byte ZIP
 has native product version 0.2.0 and all 34 packaged dist hashes match the tested
-build. Publication must still be confirmed in the exact-SHA hosted workflow.
+build. These local checks alone did not establish publication; the hosted
+outcome is recorded below.
 
 The initial 0.2.0 push (`80a52b6`, run `44092049478`) stopped before publication:
 four unit tests exceeded cold-runner timing budgets (Windows ACL 24.97s,
@@ -55,7 +56,7 @@ and a four-second sort-response wait; no assertion, security check or browser/
 WebView2 latency criterion is removed. All 156 unit tests, typecheck and lint
 pass after the correction. The user explicitly authorized a corrective push
 and manual release dispatch against its new main SHA without another version
-change. Preflight still finds no 0.2.0 tag/draft; retain immutable releases.
+change. That preflight found no 0.2.0 tag/draft; immutable releases stayed enabled.
 
 Manual retry `44094446228` at `38bff5e` passed 155 tests and exposed one stale-DOM
 assertion. When a changing source safely invalidates a snapshot, the graph can
@@ -63,8 +64,23 @@ unmount; the test kept checking its detached SVG. A source-disable/re-enable
 fixture reproduced that exact failure locally, then passed after re-querying
 the current graph within waitFor. Deleted-node absence, surviving-node presence,
 source clearing, schema warnings and tab-state checks are all retained. The full
-156 tests, typecheck and lint pass after this test-only correction; the next
-manual dispatch must target its new main SHA, still at unpublished 0.2.0.
+156 tests, typecheck and lint pass after this test-only correction. The subsequent
+manual dispatch targeted its new main SHA at unchanged 0.2.0.
+
+Hosted [run 44095748631](https://github.com/iljoong/win-copilotsession/actions/runs/44095748631)
+then passed every gate and published
+[v0.2.0](https://github.com/iljoong/win-copilotsession/releases/tag/v0.2.0)
+at 2026-11-17T13:51:41Z. Its immutable tag targets
+`edfa0b3dfd60642541ff6e1bd01ecf8e730796ba`; GitHub confirms `draft=false`,
+`prerelease=false`, `immutable=true` and an uploaded
+`CopilotSessionDashboard-0.2.0-win-x64.zip` of 113,294,392 bytes
+(`sha256:7e377df050023d3da93613cd60a95182f36b52ff4e83d3f4ed1c9b045fc86477`).
+Hosted evidence includes 156 unit tests, typecheck/lint, standard LF Prettier
+and C# format, 14 Chromium workflows, 57 shell tests, both 122-test packaging
+gates, Release packaging, native-version/ZIP checks and nine WebView2 workflows.
+Defender reported zero events and complete cleanup (2.43-second cold /
+1.01-second warm startup). Windows 10 and managed ASR-Block target coverage remain
+separate; the hosted artifact, not the earlier local ZIP, is the published build.
 
 The approved [documentation/release design](superpowers/specs/2026-11-13-desktop-readme-version-release-design.md)
 was implemented on `feature/desktop-docs-version-releases`. The user subsequently
