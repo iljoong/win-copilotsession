@@ -28,6 +28,7 @@ export interface Store {
   getCheckpoint(sourceId: string): string | null;
   listSessions(filter: SessionFilter): Page<SessionSummary>;
   getSession(id: string): SessionDetails | null;
+  getCliHistorySession(id: string): { root: string; sessionRef: string } | null;
   getEntries(
     id: string,
     offset: number,
@@ -369,6 +370,20 @@ export function openStore(dbPath: string): Store {
           ).length,
         },
       };
+    },
+    getCliHistorySession(id) {
+      const sources = store.listSources();
+      for (const record of records(id)) {
+        if (record.namespace !== 'cli') continue;
+        const source = sources.find(
+          (item) =>
+            item.id === record.sourceId &&
+            item.kind === 'cli-history' &&
+            item.enabled,
+        );
+        if (source) return { root: source.path, sessionRef: record.sessionRef };
+      }
+      return null;
     },
     getEntries(id, offset, limit, hideEmptyPreviews = false, order = 'asc') {
       return paginate(

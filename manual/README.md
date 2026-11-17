@@ -10,8 +10,9 @@ Local-only session browser for Copilot CLI and VS Code.
 Browse sessions, search and copy complete original prompts, inspect text-only
 assistant previews, and monitor observed activity. The session-first workspace
 puts search and compact icon-led filters inside the hideable Sessions pane.
-Session information and usage share one collapsed-by-default expander, leaving
-Conversation as the main reading surface. The workspace stacks on narrow screens.
+The selected session has **Conversation** (default), **Session Info**, and
+**Todo status** tabs, keeping one reading surface visible at a time.
+The workspace stacks on narrow screens.
 Usage views distinguish reported zero, missing data,
 partial coverage, and overlapping sources.
 
@@ -23,7 +24,10 @@ partial coverage, and overlapping sources.
 - [Approved product design](../docs/superpowers/specs/2026-11-12-copilot-session-dashboard-design.md):
   baseline scope and acceptance boundaries.
 - [Conversation-focused UI design](../docs/superpowers/specs/2026-11-13-conversation-focused-sessions-ui-design.md):
-  approved sidebar, combined expander, and prompt-viewport behavior.
+  approved sidebar and prompt-viewport behavior.
+- [Session detail tabs and TODO completion](../docs/superpowers/specs/2026-11-17-session-detail-tabs-design.md):
+  current tabs, progress calculation and newest-first TODO order; supersedes
+  the earlier overview/TODO expanders.
 - [Windows desktop research](../docs/research/windows-desktop-options-research.md):
   Electron, WebView2, and native C# comparison (historical research).
 - [Portable desktop spec](../docs/superpowers/specs/2026-11-13-windows-portable-webview2-design.md)
@@ -105,7 +109,7 @@ SDK; runtimes are downloaded once and verified by hash and signature):
 npm run desktop:test                 # shell unit tests
 npm run desktop:package -- -Flavor Release   # desktop\artifacts\*.zip
 npm run desktop:e2e                  # Testing package + WebView2 workflows
-npm run desktop:defender-smoke -- -Zip desktop\artifacts\CopilotSessionDashboard-0.1.0-win-x64.zip
+npm run desktop:defender-smoke -- -Zip desktop\artifacts\CopilotSessionDashboard-0.2.0-win-x64.zip
 ```
 
 `desktop:defender-smoke` extracts the zip to a temporary folder with spaces and
@@ -126,6 +130,54 @@ The page shows the resolved history path, normally
 CLI history**, review the path, check read-only consent, and select **Enable
 source**. Existing session folders are indexed and new complete JSONL records
 are polled about once a second. Source files are never modified.
+
+Select **Todo status** in the selected session to read `id`, `created_at`,
+`updated_at`, `title`, and `status` from that session's `session.db` (`todos`, or
+legacy `todo`), plus `todo_id` / `depends_on` from `todo_deps`. Only enabled
+CLI-history sources are eligible. **Groups** is the default view: dependencies
+form connected groups across the entire session, with standalone tasks included.
+Groups are not inferred from timestamps or ID prefixes; a common ID prefix can
+name a group after its dependency membership is established.
+
+Each card shows completion, source-status counts, earliest creation and latest
+modification. Sort by last modification (default) or creation, newest first;
+unknown times are last, with creation/ID tie breakers. Group pages contain 20
+cards. Completed groups start collapsed; the first unfinished group on the first
+page opens initially. Open one group at a time for **Dependencies** only.
+Each graph box shows the title, then `id`, raw `created_at`, and `status` in that
+order. Missing creation times say **Unavailable**, not a guessed time. Graph
+layout is not time or evidence of actual parallel execution. The former
+**Last modification timeline** and **Task details** sections are removed from
+cards; use **All tasks** for the separate full table.
+
+**Creation to last update** is a recorded span, never execution duration or
+completion time. Equal endpoints say **Same timestamp recorded**. Raw timestamps
+retain their source representation. Valid offset-free date-time strings use an
+unspecified source clock; explicit-offset timestamps represent instants.
+If groups contain different clock types, a notice explains that those clock types
+are ordered separately rather than compared as instants. Missing,
+invalid, mixed-clock, unknown-unit numeric or update-before-creation data has no
+computed span. Missing `updated_at` remains unavailable. Missing or
+unsupported dependencies warn that separately displayed tasks may not be
+independent. Duplicate links are deduplicated; missing endpoints and cycles warn
+without fabricating tasks. Cyclic graphs are omitted; **All tasks** remains usable.
+Grouped view refuses more than 10,000 tasks or 50,000 dependency rows rather than
+grouping a partial subset. Graphs above 80 nodes or 400 edges are explicitly
+omitted; **All tasks** remains available.
+
+**All tasks** retains the complete source list, 50 rows per page ordered by
+`created_at` descending, then ID descending for ties; undated rows stay last.
+Source timestamps and status values are shown as stored, not inferred. Only the
+selected view refreshes about once a second while Todo status is active.
+The progress bar and percentage use exact `status='done'` rows divided by all
+rows in the table, not just the current page. Other/unknown statuses count in the
+denominator but are not completed. Percentages are rounded to one decimal when
+needed. Empty or unavailable data shows **Progress unavailable**, not 0%.
+This is TODO completion, not session completion. Switching away stops TODO reads.
+A missing/unreadable DB, unsupported schema, unsafe link, nonempty rollback
+journal, or DB/WAL larger than 64 MiB combined reports unavailable, distinct from
+a readable empty TODO table.
+VS Code imports and telemetry-only sessions do not supply this table.
 
 Enabled readers retain the selected file identity and drain it before switching
 to a replacement. After restart, recovery checks up to 1,000 regular files in
@@ -207,12 +259,18 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
   icon-led labeled filter controls and removable chips. Collapsing closes any
   nested editor without clearing filters.
   Above 900 CSS pixels the list and details scroll independently; narrower
-  screens use stacked document flow. Session information and usage expand
-  together; title, observed state, freshness warnings, and coverage indicators
-  remain visible when collapsed.
-- Pane/expander and Conversation display settings survive session switching
+  screens use stacked document flow. Title, observed state and freshness warnings
+  stay outside the three detail tabs. **Session Info** contains the eight usage
+  metrics and metadata, retaining partial/unavailable indicators. The old
+  **Data coverage and limitations** disclosure is removed; stored warnings and
+  Sources/Usage behavior are unchanged.
+- Pane/filter-expander, selected detail tab and Conversation display settings survive session switching
   and live updates within the mounted Sessions page, but reset on reload or
-  tab remount. Existing search/filter/selection URL state is unchanged.
+  top-level page remount. TODO view, group expansion/order and pagination survive
+  detail-tab switches and reset
+  on session changes. Arrow keys/Home/End navigate the detail tabs; a matching
+  prompt search reveals Conversation. Existing search/filter/selection URL state
+  is unchanged.
 - Activity is observed events and counts, not a percent-complete estimate or a
   guarantee that a tool is currently running. Source time, dashboard observation
   time, connection status, and observations older than 30 seconds are visible.
@@ -250,6 +308,14 @@ The database contains **full original prompts**, bounded assistant previews,
 session metadata, usage observations, and ingestion checkpoints. Protect it like
 your Copilot history. Loopback authentication is not isolation from other
 processes running as your user. Do not expose the app through a proxy or tunnel.
+
+TODO fields are not indexed or retained in dashboard SQLite. To avoid SQLite
+WAL readers writing original shared-memory sidecars, each TODO read uses a
+bounded disposable DB/WAL copy under the OS user temporary directory. These
+copies can contain other session database tables, although only the five TODO
+columns and two dependency columns are queried for display. Copies are removed after the read, including
+handled failures; abrupt process/OS termination may leave temporary files.
+Protect your temporary directory as well as your history.
 
 **Clear local data** requires typing `CLEAR LOCAL DASHBOARD DATA`. It clears
 dashboard records and disables collection, without deleting original Copilot

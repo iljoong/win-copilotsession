@@ -150,6 +150,43 @@ export type SessionDetails = {
   warnings: string[];
   counts: { modelCalls: number; toolCalls: number };
 };
+export type SessionTodo = {
+  id: string;
+  created_at: string | number | null;
+  updated_at: string | number | null;
+  title: string;
+  status: string;
+};
+export type SessionTodos = Page<SessionTodo> & {
+  availability: 'available' | 'unavailable';
+  message: string | null;
+  completed: number | null;
+};
+export type TodoDependency = { todo_id: string; depends_on: string };
+export type TodoGroupSummary = {
+  id: string;
+  label: string;
+  total: number;
+  completed: number;
+  statuses: Record<string, number>;
+  createdAt: SessionTodo['created_at'];
+  updatedAt: SessionTodo['updated_at'];
+  spanMs: number | null;
+  warnings: string[];
+};
+export type TodoGroupDetail = Page<SessionTodo> & {
+  summary: TodoGroupSummary;
+  graph: { nodes: SessionTodo[]; edges: TodoDependency[] } | null;
+  graphMessage: string | null;
+};
+export type SessionTodoGroups = Page<TodoGroupSummary> & {
+  availability: 'available' | 'unavailable';
+  message: string | null;
+  dependenciesAvailable: boolean;
+  taskTotal: number;
+  completed: number | null;
+  detail: TodoGroupDetail | null;
+};
 export type SourceStatus = SourceConfig & {
   lastSuccessAt: number | null;
   error: string | null;

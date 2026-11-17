@@ -11,6 +11,8 @@ import type { IngestionService } from './sources/ingestion.js';
 import type { EventHub } from './events.js';
 import { parseVsCodeExport } from './sources/vscode.js';
 import { object } from './sources/values.js';
+import { readSessionTodos } from './sources/todos.js';
+import { readSessionTodoGroups } from './sources/todo-groups.js';
 
 class HttpError extends Error {
   constructor(
@@ -162,7 +164,7 @@ export function createApi(options: {
         else if (url.pathname === '/api/events') events.attach(req, res);
         else {
           const match =
-            /^\/api\/sessions\/([a-zA-Z0-9_-]+)(?:\/(entries|activity))?$/.exec(
+            /^\/api\/sessions\/([a-zA-Z0-9_-]+)(?:\/(entries|activity|todos|todo-groups))?$/.exec(
               url.pathname,
             );
           if (!match || !store.getSession(match[1]))
@@ -170,6 +172,61 @@ export function createApi(options: {
           if (!match[2]) send(200, store.getSession(match[1]));
           else {
             const filter = filterFrom(url);
+            if (match[2] === 'todos' || match[2] === 'todo-groups') {
+              const location = store.getCliHistorySession(match[1]);
+              const order = url.searchParams.get('groupOrder') ?? 'updated';
+              const group = url.searchParams.get('group');
+              const taskOffset = Number(
+                url.searchParams.get('taskOffset') ?? 0,
+              );
+              if (
+                !['updated', 'created'].includes(order) ||
+                (group !== null && !/^g-[a-f0-9]{24}$/.test(group)) ||
+                !Number.isSafeInteger(taskOffset) ||
+                taskOffset < 0
+              )
+                throw new HttpError(400, 'Invalid TODO group query.');
+              const todos =
+                match[2] === 'todo-groups'
+                  ? await readSessionTodoGroups(
+                      location,
+                      filter.offset,
+                      filter.limit,
+                      {
+                        order: order as 'updated' | 'created',
+                        group,
+                        taskOffset,
+                      },
+                    )
+                  : await readSessionTodos(
+                      location,
+                      filter.offset,
+                      filter.limit,
+                    );
+              const current = store.getCliHistorySession(match[1]);
+              send(
+                200,
+                JSON.stringify(location) === JSON.stringify(current)
+                  ? todos
+                  : {
+                      ...todos,
+                      availability: 'unavailable',
+                      items: [],
+                      total: 0,
+                      completed: null,
+                      ...('detail' in todos
+                        ? {
+                            taskTotal: 0,
+                            detail: null,
+                            dependenciesAvailable: false,
+                          }
+                        : {}),
+                      message:
+                        'TODO source changed. Reopen this session to retry.',
+                    },
+              );
+              return true;
+            }
             send(
               200,
               match[2] === 'entries'

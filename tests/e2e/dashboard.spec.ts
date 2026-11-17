@@ -3,6 +3,7 @@ import { appendFile, mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { exported, prompt, span } from './fixtures.js';
 import { startDashboard } from './harness.js';
+import { DatabaseSync } from 'node:sqlite';
 
 const test = base.extend<{ app: Awaited<ReturnType<typeof startDashboard>> }>({
   app: async ({ context }, use) => {
@@ -42,6 +43,180 @@ async function enableSource(
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Live updates connected')).toBeVisible();
 }
+test('todoStatusTabShowsCompletionAndNewestRowsAndRefreshesWithoutEvents', async ({
+  page,
+  app,
+}, info) => {
+  const history = join(dirname(app.telemetryPath), 'todo-history');
+  const directory = join(history, 'synthetic-todo-session');
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, 'events.jsonl'),
+    JSON.stringify({
+      id: 'todo-prompt',
+      type: 'user.message',
+      timestamp: '2026-11-17T01:00:00Z',
+      data: { content: 'Synthetic TODO session' },
+    }) + '\n',
+  );
+  const db = new DatabaseSync(join(directory, 'session.db'));
+  try {
+    db.exec(`PRAGMA journal_mode=WAL;
+      CREATE TABLE todos(id TEXT, created_at TEXT, updated_at TEXT, title TEXT, status TEXT);
+      CREATE TABLE todo_deps(todo_id TEXT, depends_on TEXT);
+      INSERT INTO todos VALUES ('implement','2026-11-17 01:00:00','2026-11-17 01:01:00','Synthetic TODO','in_progress'),
+        ('newest','2026-11-17 03:00:00','2026-11-17 03:01:00','Newest task','done'),
+        ('middle','2026-11-17 02:00:00','2026-11-17 02:01:00','환경 설정과 실행 가이드의 문서 갱신 검증하기','pending'),
+        ('standalone','2026-11-17 02:30:00','2026-11-17 02:30:00','Independent task','done');
+      INSERT INTO todo_deps VALUES ('middle','implement'),('newest','middle');`);
+    await page.goto(app.origin);
+    await enableSource(page, history, 'cli-history');
+    const conversation = page.getByRole('tab', {
+      name: 'Conversation',
+      exact: true,
+    });
+    const todoTab = page.getByRole('tab', { name: 'Todo status', exact: true });
+    await expect(conversation).toHaveAttribute('aria-selected', 'true');
+    await expect(todoTab).toHaveAttribute('aria-selected', 'false');
+    await conversation.focus();
+    await conversation.press('End');
+    await expect(todoTab).toBeFocused();
+    await expect(todoTab).toHaveAttribute('aria-selected', 'true');
+    const panel = page.getByRole('tabpanel', { name: 'Todo status' });
+    const overall = panel.getByRole('progressbar', {
+      name: 'TODO completion',
+      exact: true,
+    });
+    await expect(overall).toHaveAttribute('value', '2');
+    await expect(
+      panel.getByText('2 of 4 tasks done', { exact: true }),
+    ).toBeVisible();
+    const group = panel.getByRole('group', {
+      name: 'TODO group Synthetic TODO',
+      exact: true,
+    });
+    await expect(group).toHaveAttribute('open', '');
+    await expect(group.getByText('33.3%', { exact: true })).toBeVisible();
+    await expect(group.getByText('2h 1m', { exact: true })).toBeVisible();
+    const graph = group.getByRole('img', {
+      name: 'Dependency graph for Synthetic TODO',
+    });
+    await expect(graph).toBeVisible();
+    const positions = await graph
+      .locator('g')
+      .evaluateAll((nodes) =>
+        Object.fromEntries(
+          nodes.map((node) => [
+            node.querySelector('title')!.textContent!.split('\n')[1],
+            (node as SVGGElement).transform.baseVal.consolidate()!.matrix.e,
+          ]),
+        ),
+      );
+    expect(positions.implement).toBeLessThan(positions.middle);
+    expect(positions.middle).toBeLessThan(positions.newest);
+    const labelWidths = await graph
+      .locator('.todo-graph-title')
+      .evaluateAll((labels) =>
+        labels.map((label) => label.getBoundingClientRect().width),
+      );
+    expect(Math.max(...labelWidths)).toBeLessThanOrEqual(216);
+    await expect(
+      group.getByRole('heading', { name: 'Dependencies', exact: true }),
+    ).toBeVisible();
+    await expect(
+      group.getByRole('heading', { name: 'Last modification timeline' }),
+    ).toHaveCount(0);
+    await expect(
+      group.getByRole('heading', { name: 'Task details' }),
+    ).toHaveCount(0);
+    await expect(group.getByRole('table')).toHaveCount(0);
+    const nodeMetadata = await graph.locator('g').evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const fields = [...node.querySelectorAll('foreignObject')[1].children];
+        const box = node.querySelector('rect')!.getBoundingClientRect();
+        return {
+          values: fields.map((field) => field.textContent),
+          fits: fields.every(
+            (field) => field.getBoundingClientRect().bottom <= box.bottom,
+          ),
+        };
+      }),
+    );
+    expect(nodeMetadata.map((node) => node.values)).toContainEqual([
+      'middle',
+      '2026-11-17 02:00:00',
+      'pending',
+    ]);
+    expect(nodeMetadata.every((node) => node.fits)).toBe(true);
+    await page.screenshot({
+      path: info.outputPath('todo-groups-desktop.png'),
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: info.outputPath('todo-groups-narrow.png'),
+      fullPage: true,
+    });
+    await panel.getByLabel('Group order').selectOption('created');
+    await expect(
+      panel.getByRole('group', { name: /^TODO group / }).first(),
+    ).toHaveAccessibleName('TODO group Independent task');
+    const standalone = panel.getByRole('group', {
+      name: 'TODO group Independent task',
+      exact: true,
+    });
+    await standalone.locator('summary').click();
+    await expect(
+      standalone.getByText('Same timestamp recorded', { exact: true }),
+    ).toBeVisible();
+    await panel.getByRole('button', { name: 'All tasks', exact: true }).click();
+    await expect(
+      panel.getByRole('cell', { name: 'in_progress', exact: true }),
+    ).toBeVisible();
+    await expect(panel.getByText('50%', { exact: true })).toBeVisible();
+    await expect(
+      panel.getByText('2 of 4 tasks done', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole('row').nth(1).getByRole('cell').first(),
+    ).toHaveText('newest');
+    await expect(
+      panel.getByRole('row').nth(4).getByRole('cell').first(),
+    ).toHaveText('implement');
+    await expect(page.getByText(/Data coverage and limitations/)).toHaveCount(
+      0,
+    );
+    await page.screenshot({
+      path: info.outputPath('todo-progress-desktop.png'),
+    });
+    db.exec("UPDATE todos SET status='done'");
+    await expect(panel.getByText('100%', { exact: true })).toBeVisible();
+    await page.setViewportSize({ width: 320, height: 800 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: info.outputPath('todo-progress-narrow.png'),
+      fullPage: true,
+    });
+    await todoTab.focus();
+    await todoTab.press('Home');
+    await expect(conversation).toBeFocused();
+    await expect(conversation).toHaveAttribute('aria-selected', 'true');
+    await expect(
+      page.getByRole('table', { name: 'Session TODOs' }),
+    ).not.toBeVisible();
+  } finally {
+    db.close();
+  }
+});
 test('compactHeaderSearchExpanderAndStickyPanelIcon', async ({
   page,
   app,
@@ -392,9 +567,7 @@ test('searchRevealsLaterMatchWithoutRefreshScrollReset', async ({
       response: [{ value: '' }],
     })),
   });
-  await page
-    .getByText('Session information and usage', { exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Session Info', exact: true }).click();
   await page.locator('details.session-search > summary').click();
   await page
     .getByRole('searchbox', { name: 'Search original prompts' })
@@ -432,7 +605,9 @@ test('searchRevealsLaterMatchWithoutRefreshScrollReset', async ({
   await appendFile(app.telemetryPath, span('scroll-preservation'));
   await refreshed;
   await expect.poll(() => promptBody.evaluate((el) => el.scrollTop)).toBe(0);
-  await expect(page.locator('.session-overview')).toHaveAttribute('open', '');
+  await expect(
+    page.getByRole('tab', { name: 'Conversation', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.session-search')).toHaveAttribute('open', '');
 });
 test('searchRevealsGreekFinalSigmaMatch', async ({ page, app }) => {
@@ -486,9 +661,7 @@ test('importSearchCopyFiltersAndSafePreviews', async ({ page, app }, info) => {
     .locator('pre');
   await expect(original).toHaveText(prompt);
   await expect(original).toHaveCSS('color', 'rgb(244, 213, 122)');
-  await page
-    .getByText('Session information and usage', { exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Session Info', exact: true }).click();
   const modelColors = await Promise.all(
     ['gpt-6.1-sol', 'claude-sonnet-5', 'gemini-4'].map(async (model) => {
       const badge = page
@@ -499,6 +672,7 @@ test('importSearchCopyFiltersAndSafePreviews', async ({ page, app }, info) => {
     }),
   );
   expect(new Set(modelColors).size).toBe(3);
+  await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
   const activity = page.locator('details.activity');
   await expect(activity.locator('summary')).toBeVisible();
   await expect(activity.locator('table')).not.toBeVisible();
@@ -720,9 +894,7 @@ test('cliHistoryDisplaysCreditsAndRetainsThemAcrossRestart', async ({
   );
   await page.goto(app.origin);
   await enableSource(page, history, 'cli-history');
-  await page
-    .getByText('Session information and usage', { exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Session Info', exact: true }).click();
   const reported = page
     .getByLabel('Selected session')
     .locator('.metrics div')
@@ -735,9 +907,7 @@ test('cliHistoryDisplaysCreditsAndRetainsThemAcrossRestart', async ({
   });
   await app.restart(context);
   await page.goto(app.origin);
-  await page
-    .getByText('Session information and usage', { exact: true })
-    .click();
+  await page.getByRole('tab', { name: 'Session Info', exact: true }).click();
   await expect(reported).toContainText('2.5 (partial)');
   expect((await app.sessions()).items[0].usage.aic).toBe(2.5);
 });

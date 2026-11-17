@@ -1,6 +1,7 @@
 import { test as base, expect, type Page } from '@playwright/test';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { exported, prompt } from '../e2e/fixtures.js';
 import {
   launchDesktop,
@@ -132,20 +133,27 @@ test('conversation focused layout in WebView2', async ({ desktop }) => {
   await expect(page.getByRole('searchbox')).not.toBeVisible();
   await search.locator('summary').focus();
   await search.locator('summary').press('Enter');
-  const overview = page.locator('details.session-overview');
-  await expect(overview).not.toHaveAttribute('open', '');
+  const infoTab = page.getByRole('tab', { name: 'Session Info', exact: true });
+  const conversationTab = page.getByRole('tab', {
+    name: 'Conversation',
+    exact: true,
+  });
+  await expect(conversationTab).toHaveAttribute('aria-selected', 'true');
   await expect(
-    overview.getByRole('heading', { name: 'Session information', exact: true }),
+    page.getByRole('heading', { name: 'Session information', exact: true }),
   ).not.toBeVisible();
-  await overview.locator('summary').click();
+  await conversationTab.focus();
+  await conversationTab.press('ArrowRight');
+  await expect(infoTab).toBeFocused();
+  const overview = page.getByRole('tabpanel', { name: 'Session Info' });
   await expect(
     overview.getByRole('heading', { name: 'Session information', exact: true }),
   ).toBeVisible();
   await expect(
     overview.getByRole('heading', { name: 'Session usage', exact: true }),
   ).toBeVisible();
-  await expect(overview.locator('details')).toHaveCount(0);
-  await overview.locator('summary').click();
+  await expect(page.getByText(/Data coverage and limitations/)).toHaveCount(0);
+  await conversationTab.click();
   const toggle = page
     .locator('.session-detail')
     .getByRole('button', { name: 'Hide sessions', exact: true });
@@ -250,6 +258,18 @@ test('live refresh shows appended CLI record within 2 seconds', async ({
   const events = join(history, 'synthetic-session', 'events.jsonl');
   await mkdir(join(history, 'synthetic-session'));
   await writeFile(events, cliEvent('first', 'Desktop CLI first prompt'));
+  const todoFile = join(history, 'synthetic-session', 'session.db');
+  const db = new DatabaseSync(todoFile);
+  try {
+    db.exec(`CREATE TABLE todos(id TEXT, created_at TEXT, updated_at TEXT, title TEXT, status TEXT);
+      CREATE TABLE todo_deps(todo_id TEXT, depends_on TEXT);
+      INSERT INTO todos VALUES ('newest','2026-11-17 03:00:00','2026-11-17 03:01:00','Newest','pending'),
+        ('middle','2026-11-17 02:00:00','2026-11-17 02:01:00','Middle','done'),
+        ('oldest','2026-11-17 01:00:00','2026-11-17 01:01:00','Oldest','in_progress');
+      INSERT INTO todo_deps VALUES ('newest','middle'),('middle','oldest');`);
+  } finally {
+    db.close();
+  }
 
   await page.getByRole('button', { name: 'Sources', exact: true }).click();
   await page.getByLabel('Source type').selectOption('cli-history');
@@ -265,6 +285,44 @@ test('live refresh shows appended CLI record within 2 seconds', async ({
   await expect(page.getByText('Live updates connected')).toBeVisible();
   const prompts = page.getByRole('article', { name: /^Original prompt/ });
   await expect(prompts.getByText('Desktop CLI first prompt')).toBeVisible();
+  await page.getByRole('tab', { name: 'Todo status', exact: true }).click();
+  const todos = page.getByRole('tabpanel', { name: 'Todo status' });
+  await expect(
+    todos.getByRole('progressbar', { name: 'TODO completion', exact: true }),
+  ).toHaveAttribute('value', '1');
+  await expect(
+    todos.getByRole('img', { name: 'Dependency graph for Oldest' }),
+  ).toBeVisible();
+  const graph = todos.getByRole('img', { name: 'Dependency graph for Oldest' });
+  await expect(
+    graph.getByText('2026-11-17 01:00:00', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    todos.getByRole('heading', { name: 'Last modification timeline' }),
+  ).toHaveCount(0);
+  await expect(
+    todos.getByRole('heading', { name: 'Task details' }),
+  ).toHaveCount(0);
+  await expect(todos.getByRole('table')).toHaveCount(0);
+  await todos.getByRole('button', { name: 'All tasks', exact: true }).click();
+  await expect(
+    todos.getByRole('row').nth(1).getByRole('cell').first(),
+  ).toHaveText('newest');
+  const update = new DatabaseSync(todoFile);
+  try {
+    update.exec("UPDATE todos SET status='done'");
+  } finally {
+    update.close();
+  }
+  await expect(todos.getByText('100%', { exact: true })).toBeVisible();
+  await todos.getByRole('button', { name: 'Groups', exact: true }).click();
+  await expect(
+    todos.getByRole('progressbar', { name: 'TODO completion', exact: true }),
+  ).toHaveAttribute('value', '3');
+  await expect(
+    todos.getByRole('img', { name: 'Dependency graph for Oldest' }),
+  ).toBeVisible();
+  await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
 
   const started = performance.now();
   await appendFile(events, cliEvent('second', 'Desktop CLI appended prompt'));

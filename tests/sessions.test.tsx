@@ -11,6 +11,9 @@ import {
 import userEvent from '@testing-library/user-event';
 import { SessionsPage } from '../src/client/sessions.js';
 import { createClientHarness } from './client-harness.js';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 
 let harness: Awaited<ReturnType<typeof createClientHarness>>;
 beforeEach(async () => {
@@ -19,6 +22,297 @@ beforeEach(async () => {
 afterEach(async () => {
   cleanup();
   await harness.close();
+});
+test('todoTabReadsOnlyWhileActiveAndRefreshesInertSourceFieldsAndProgress', async () => {
+  const user = userEvent.setup();
+  await mkdir(join(harness.root, 'history', 'a'));
+  harness.store.saveSource({
+    id: 'source',
+    kind: 'cli-history',
+    enabled: true,
+    path: join(harness.root, 'history'),
+  });
+  harness.store.commitBatch({
+    records: [harness.entry('a', 'Alpha'), harness.entry('b', 'Beta')],
+    warnings: [],
+  });
+  const db = new DatabaseSync(join(harness.root, 'history', 'a', 'session.db'));
+  try {
+    db.exec(`PRAGMA journal_mode=WAL;
+      CREATE TABLE todos(id TEXT, created_at TEXT, title TEXT, status TEXT);
+      INSERT INTO todos VALUES ('build','2026-11-17 01:00:00','<img src=x onerror=alert(1)>','in_progress');`);
+    let reads = 0;
+    harness.delay(async (path) => {
+      if (path.endsWith('/todos')) reads++;
+    });
+    render(<SessionsPage />);
+    const todoTab = await screen.findByRole('tab', { name: 'Todo status' });
+    expect(todoTab).toHaveAttribute('aria-selected', 'false');
+    expect(reads).toBe(0);
+    await user.click(todoTab);
+    await user.click(screen.getByRole('button', { name: 'All tasks' }));
+    await screen.findByRole('cell', { name: 'in_progress' });
+    const panel = screen.getByRole('tabpanel', { name: 'Todo status' });
+    const table = within(panel).getByRole('table');
+    expect(
+      within(panel).getByRole('progressbar', { name: 'TODO completion' }),
+    ).toHaveValue(0);
+    expect(within(panel).getByText('0%')).toBeVisible();
+    expect(within(table).getByRole('cell', { name: 'build' })).toBeVisible();
+    expect(
+      within(table).getByRole('cell', { name: '2026-11-17 01:00:00' }),
+    ).toBeVisible();
+    expect(
+      within(table).getByRole('cell', { name: '<img src=x onerror=alert(1)>' }),
+    ).toBeVisible();
+    expect(table.querySelector('img')).toBeNull();
+    db.exec("UPDATE todos SET status='done'");
+    await waitFor(
+      () =>
+        expect(within(table).getByRole('cell', { name: 'done' })).toBeVisible(),
+      { timeout: 4000 },
+    );
+    expect(within(panel).getByText('100%')).toBeVisible();
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }));
+    const closedReads = reads;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(reads).toBe(closedReads);
+    await user.click(todoTab);
+    await user.click(screen.getByRole('button', { name: 'Open Beta' }));
+    await screen.findByRole('heading', { name: 'Beta' });
+    await user.click(screen.getByRole('button', { name: 'All tasks' }));
+    const next = screen.getByRole('tabpanel', { name: 'Todo status' });
+    await waitFor(() =>
+      expect(within(next).getByText(/TODO data unavailable/)).toBeVisible(),
+    );
+    expect(within(next).queryByRole('cell', { name: 'build' })).toBeNull();
+    expect(within(next).getByText('Progress unavailable')).toBeVisible();
+    expect(within(next).queryByRole('progressbar')).toBeNull();
+  } finally {
+    db.close();
+  }
+});
+test('todoPaginationUsesGlobalProgressKeepsPageAcrossTabsAndRecoversAfterDeletion', async () => {
+  const user = userEvent.setup();
+  await mkdir(join(harness.root, 'history', 'a'));
+  harness.store.saveSource({
+    id: 'source',
+    kind: 'cli-history',
+    enabled: true,
+    path: join(harness.root, 'history'),
+  });
+  harness.store.commitBatch({
+    records: [harness.entry('a', 'Alpha')],
+    warnings: [],
+  });
+  const db = new DatabaseSync(join(harness.root, 'history', 'a', 'session.db'));
+  try {
+    db.exec(
+      'CREATE TABLE todos(id TEXT, created_at INTEGER, title TEXT, status TEXT)',
+    );
+    const insert = db.prepare(
+      "INSERT INTO todos VALUES (?,?,'Task','pending')",
+    );
+    for (let n = 0; n < 51; n++) insert.run(`task-${n}`, n);
+    db.exec(
+      "UPDATE todos SET status='done' WHERE id IN ('task-0','task-1','task-2')",
+    );
+    render(<SessionsPage />);
+    await user.click(await screen.findByRole('tab', { name: 'Todo status' }));
+    await user.click(screen.getByRole('button', { name: 'All tasks' }));
+    await screen.findByRole('cell', { name: 'task-50' });
+    expect(screen.getByText('5.9%')).toBeVisible();
+    expect(screen.getByText('3 of 51 tasks done')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Next TODOs' }));
+    await screen.findByRole('cell', { name: 'task-0' });
+    expect(screen.queryByRole('cell', { name: 'task-50' })).toBeNull();
+    expect(screen.getByText('5.9%')).toBeVisible();
+    await user.click(screen.getByRole('tab', { name: 'Session Info' }));
+    await user.click(screen.getByRole('tab', { name: 'Todo status' }));
+    expect(screen.getByRole('cell', { name: 'task-0' })).toBeVisible();
+    db.exec('DELETE FROM todos');
+    await waitFor(
+      () =>
+        expect(
+          screen.getByText('No TODO items in this session.'),
+        ).toBeVisible(),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByRole('cell', { name: 'task-0' })).toBeNull();
+    expect(screen.getByText('Progress unavailable')).toBeVisible();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  } finally {
+    db.close();
+  }
+});
+async function groupFixture() {
+  const directory = join(harness.root, 'history', 'a');
+  await mkdir(directory);
+  harness.store.saveSource({
+    id: 'source',
+    kind: 'cli-history',
+    enabled: true,
+    path: join(harness.root, 'history'),
+  });
+  harness.store.commitBatch({
+    records: [harness.entry('a', 'Alpha')],
+    warnings: [],
+  });
+  const db = new DatabaseSync(join(directory, 'session.db'));
+  db.exec(`PRAGMA journal_mode=WAL;
+    CREATE TABLE todos(id TEXT, created_at TEXT, updated_at TEXT, title TEXT, status TEXT);
+    CREATE TABLE todo_deps(todo_id TEXT, depends_on TEXT);`);
+  return db;
+}
+test('todoCardsShowOnlyDependenciesWithIdCreationTimeAndStatus', async () => {
+  const user = userEvent.setup();
+  const db = await groupFixture();
+  try {
+    db.exec(`INSERT INTO todos VALUES
+      ('job-checks','2026-11-17 04:18:07','2026-11-17 04:18:31','<img src=x onerror=alert(1)>','done'),
+      ('job-docs','2026-11-17 04:18:07','2026-11-17 04:20:39','Document','in_progress'),
+      ('job-review','2026-11-17 04:18:07','2026-11-17 04:21:15','Review','custom_status'),
+      ('single','2026-11-17 04:19:00','2026-11-17 04:19:00','Standalone','done');
+      INSERT INTO todo_deps VALUES ('job-docs','job-checks'),('job-review','job-docs');`);
+    render(<SessionsPage />);
+    await user.click(await screen.findByRole('tab', { name: 'Todo status' }));
+    expect(screen.getByRole('button', { name: 'Groups' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const job = await screen.findByRole('group', { name: 'TODO group job' });
+    const single = screen.getByRole('group', { name: 'TODO group Standalone' });
+    await waitFor(() => expect(job).toHaveAttribute('open'));
+    expect(single).not.toHaveAttribute('open');
+    expect(
+      within(job).getByRole('progressbar', { name: 'job completion' }),
+    ).toHaveValue(1);
+    expect(within(job).getByText('33.3%')).toBeVisible();
+    expect(within(job).getByText('custom_status: 1')).toBeVisible();
+    expect(within(job).getByText('3m 8s')).toBeVisible();
+    const graph = await within(job).findByRole('img', {
+      name: 'Dependency graph for job',
+    });
+    const metadata = within(graph).getByText('job-checks').parentElement!;
+    expect(
+      Array.from(metadata.children).map((field) => field.textContent),
+    ).toEqual(['job-checks', '2026-11-17 04:18:07', 'done']);
+    expect(
+      within(job)
+        .getAllByRole('heading')
+        .map((heading) => heading.textContent),
+    ).toEqual(['Dependencies']);
+    expect(
+      within(job).queryByRole('region', { name: 'Last modification timeline' }),
+    ).toBeNull();
+    expect(within(job).queryByRole('table')).toBeNull();
+    expect(
+      within(graph).getByText('<img src=x onerror=alert(1)>'),
+    ).toBeVisible();
+    expect(job.querySelector('img')).toBeNull();
+    db.exec("UPDATE todos SET status='done' WHERE id LIKE 'job-%'");
+    await waitFor(
+      () =>
+        expect(
+          within(job).getByRole('progressbar', { name: 'job completion' }),
+        ).toHaveValue(3),
+      { timeout: 4000 },
+    );
+    expect(
+      screen.getByRole('group', { name: 'TODO group job' }),
+    ).toHaveAttribute('open');
+    await user.click(screen.getByRole('tab', { name: 'Session Info' }));
+    await user.click(screen.getByRole('tab', { name: 'Todo status' }));
+    expect(job).toHaveAttribute('open');
+    await user.selectOptions(screen.getByLabelText('Group order'), 'created');
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('group', { name: /^TODO group / })[0],
+      ).toHaveAccessibleName('TODO group Standalone'),
+    );
+    await user.click(
+      within(
+        screen.getByRole('group', { name: 'TODO group Standalone' }),
+      ).getByText('Standalone', { exact: true }),
+    );
+    await screen.findByRole('img', { name: 'Dependency graph for Standalone' });
+    expect(
+      within(
+        screen.getByRole('group', { name: 'TODO group Standalone' }),
+      ).getByText('Same timestamp recorded'),
+    ).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'All tasks' }));
+    await screen.findByRole('table', { name: 'Session TODOs' });
+    expect(
+      screen.getByRole('columnheader', { name: 'updated_at' }),
+    ).toBeVisible();
+  } finally {
+    db.close();
+  }
+});
+test('todoDependencyCardsRefreshAllNodesAndPreserveExpansionAcrossTabs', async () => {
+  const user = userEvent.setup();
+  const db = await groupFixture();
+  try {
+    db.exec(`WITH RECURSIVE n(x) AS (VALUES(0) UNION ALL SELECT x+1 FROM n WHERE x<50)
+      INSERT INTO todos SELECT printf('task-%03d',x),'2026-11-17 01:00:00','2026-11-17 01:01:00','Task','pending' FROM n;
+      INSERT INTO todo_deps SELECT id,'task-000' FROM todos WHERE id!='task-000';
+      UPDATE todos SET created_at=NULL WHERE id='task-000';
+      UPDATE todos SET created_at=0 WHERE id='task-001';`);
+    let reads = 0;
+    harness.delay(async (path) => {
+      if (path.endsWith('/todo-groups')) reads++;
+    });
+    render(<SessionsPage />);
+    await user.click(await screen.findByRole('tab', { name: 'Todo status' }));
+    let graph = await screen.findByRole('img', {
+      name: 'Dependency graph for task',
+    });
+    expect(within(graph).getByText('task-050')).toBeVisible();
+    const missingTime = within(graph).getByText('task-000').parentElement!;
+    expect(within(missingTime).getByText('Unavailable')).toBeVisible();
+    const zeroTime = within(graph).getByText('task-001').parentElement!;
+    expect(within(zeroTime).getByText('0')).toBeVisible();
+    expect(
+      screen.queryByRole('button', { name: 'Next group tasks' }),
+    ).toBeNull();
+    await user.click(screen.getByRole('tab', { name: 'Conversation' }));
+    const stopped = reads;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(reads).toBe(stopped);
+    await user.click(screen.getByRole('tab', { name: 'Todo status' }));
+    graph = await screen.findByRole('img', {
+      name: 'Dependency graph for task',
+    });
+    expect(within(graph).getByText('task-000')).toBeVisible();
+    db.exec("DELETE FROM todos WHERE id='task-050'");
+    await waitFor(
+      () => expect(within(graph).queryByText('task-050')).toBeNull(),
+      { timeout: 4000 },
+    );
+    expect(within(graph).getByText('task-049')).toBeVisible();
+    db.exec('DROP TABLE todo_deps; ALTER TABLE todos DROP COLUMN updated_at;');
+    await waitFor(
+      () =>
+        expect(screen.getByText(/Dependency data unavailable/)).toBeVisible(),
+      { timeout: 4000 },
+    );
+    expect(
+      screen.getAllByText('Time range unavailable').length,
+    ).toBeGreaterThan(0);
+    db.exec('DELETE FROM todos');
+    await waitFor(
+      () =>
+        expect(
+          screen.getByText('No TODO items in this session.'),
+        ).toBeVisible(),
+      { timeout: 4000 },
+    );
+    expect(screen.queryByRole('table', { name: 'Group tasks' })).toBeNull();
+    expect(screen.queryByRole('progressbar')).toBeNull();
+  } finally {
+    db.close();
+  }
 });
 test('searchExpanderDefaultsCollapsedAndRetainsFilters', async () => {
   const user = userEvent.setup();
@@ -75,7 +369,7 @@ test('sidebarToggleIsAnIconInsideTheDetailPanelWithoutSelection', async () => {
     true,
   );
 });
-test('combinedOverviewShowsInformationAndUsageTogether', async () => {
+test('detailTabsDefaultToConversationAndSupportKeyboardAndSessionSwitching', async () => {
   const user = userEvent.setup();
   harness.store.commitBatch({
     records: [
@@ -85,24 +379,50 @@ test('combinedOverviewShowsInformationAndUsageTogether', async () => {
     warnings: [],
   });
   render(<SessionsPage />);
-  const summary = await screen.findByText('Session information and usage');
-  const overview = summary.closest('details')!;
-  expect(overview).not.toHaveAttribute('open');
-  expect(overview.querySelector('details')).toBeNull();
-  await user.click(summary);
-  expect(overview).toHaveAttribute('open');
+  const conversation = await screen.findByRole('tab', { name: 'Conversation' });
+  const info = screen.getByRole('tab', { name: 'Session Info' });
+  expect(
+    within(screen.getByRole('tablist', { name: 'Session details' }))
+      .getAllByRole('tab')
+      .map((tab) => tab.textContent),
+  ).toEqual(['Conversation', 'Session Info', 'Todo status']);
+  expect(conversation).toHaveAttribute('aria-selected', 'true');
+  expect(screen.getByRole('tabpanel', { name: 'Conversation' })).toBeVisible();
+  expect(
+    screen.queryByRole('heading', { name: 'Session information' }),
+  ).toBeNull();
+  await user.click(conversation);
+  await user.keyboard('{ArrowRight}');
+  expect(info).toHaveFocus();
+  expect(info).toHaveAttribute('aria-selected', 'true');
+  const overview = screen.getByRole('tabpanel', { name: 'Session Info' });
+  expect(info).toHaveAttribute('aria-controls', overview.id);
+  expect(overview).toHaveAttribute('aria-labelledby', info.id);
   expect(within(overview).getByText('Session information')).toBeVisible();
   expect(within(overview).getByText('Session usage')).toBeVisible();
   expect(overview.querySelectorAll('.metrics > div')).toHaveLength(8);
   await user.click(screen.getByRole('button', { name: 'Open Beta' }));
   await screen.findByRole('heading', { name: 'Beta' });
-  expect(
-    screen.getByText('Session information and usage').closest('details'),
-  ).toHaveAttribute('open');
-  await user.click(screen.getByText('Session information and usage'));
-  expect(within(overview).getByText('Session usage')).not.toBeVisible();
+  expect(screen.getByRole('tab', { name: 'Session Info' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  expect(screen.getByRole('heading', { name: 'Session usage' })).toBeVisible();
+  await user.click(screen.getByRole('tab', { name: 'Session Info' }));
+  await user.keyboard('{End}');
+  expect(screen.getByRole('tab', { name: 'Todo status' })).toHaveFocus();
+  expect(screen.getByRole('tab', { name: 'Todo status' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await user.keyboard('{ArrowRight}');
+  expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveFocus();
+  await user.keyboard('{ArrowLeft}');
+  expect(screen.getByRole('tab', { name: 'Todo status' })).toHaveFocus();
+  await user.keyboard('{Home}');
+  expect(screen.getByRole('tab', { name: 'Conversation' })).toHaveFocus();
 });
-test('closedOverviewKeepsStateAndWarningsVisible', async () => {
+test('detailTabsKeepObservedStateAndMetricAvailabilityButRemoveCoverageDetails', async () => {
   const user = userEvent.setup();
   harness.store.commitBatch({
     records: [
@@ -114,14 +434,11 @@ test('closedOverviewKeepsStateAndWarningsVisible', async () => {
         stateScope: 'turn',
       }),
     ],
-    warnings: [],
+    warnings: ['Old detailed coverage warning'],
   });
   render(<SessionsPage />);
-  const overview = (
-    await screen.findByText('Session information and usage')
-  ).closest('details')!;
+  await screen.findByRole('tab', { name: 'Session Info' });
   expect(screen.getByText(/Observation stale/)).toBeVisible();
-  expect(overview.contains(screen.getByText(/Observation stale/))).toBe(false);
   expect(screen.getByText(/— turn scope/)).toBeVisible();
   const toolbar = screen.getByRole('button', {
     name: 'Hide sessions',
@@ -133,7 +450,11 @@ test('closedOverviewKeepsStateAndWarningsVisible', async () => {
   await user.click(screen.getByRole('button', { name: 'Hide sessions' }));
   expect(within(toolbar).getByText(/Observation stale/)).toBeVisible();
   await user.click(screen.getByRole('button', { name: /^Show sessions/ }));
-  expect(within(overview).getAllByText('Unavailable')[0]).not.toBeVisible();
+  expect(screen.queryByText(/Data coverage and limitations/)).toBeNull();
+  expect(screen.queryByText('Old detailed coverage warning')).toBeNull();
+  await user.click(screen.getByRole('tab', { name: 'Session Info' }));
+  expect(screen.getAllByText('Unavailable')[0]).toBeVisible();
+  expect(screen.queryByText('Old detailed coverage warning')).toBeNull();
 });
 test('sidebarFiltersPreserveQueriesAndClearGroups', async () => {
   const user = userEvent.setup();
@@ -212,6 +533,12 @@ test('hideRestoreRetainsSessionAndControls', async () => {
     ).getByRole('button', { name: 'Next' }),
   );
   await screen.findByText('Prompt 25', { exact: true });
+  await user.click(screen.getByRole('tab', { name: 'Session Info' }));
+  await user.click(screen.getByRole('tab', { name: 'Conversation' }));
+  expect(screen.getByText('Prompt 25', { exact: true })).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: 'Ascending (oldest first)' }),
+  ).toHaveAttribute('aria-pressed', 'true');
   const selected = new URLSearchParams(window.location.search).get('session');
   await user.click(screen.getByRole('button', { name: 'Hide sessions' }));
   const show = screen.getByRole('button', { name: /^Show sessions/ });

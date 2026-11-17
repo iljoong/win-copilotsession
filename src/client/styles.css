@@ -409,20 +409,218 @@ main {
   font-size: 13px;
   margin-bottom: 8px;
 }
-.session-overview {
-  border-top: 1px solid var(--rule);
+.session-detail-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
   border-bottom: 1px solid var(--rule);
-  padding: 12px 0;
-  margin-bottom: 14px;
+  margin-bottom: 20px;
 }
-.session-overview h3 {
-  margin-top: 16px;
+.session-detail-tabs [role='tab'] {
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: 13px;
 }
-.session-overview .metrics {
-  margin-bottom: 0;
+.session-detail-tabs [aria-selected='true'] {
+  color: var(--signal);
+  border-bottom-color: var(--signal);
 }
-.coverage > summary {
-  color: #eacb8b;
+.session-info .metrics {
+  margin-bottom: 20px;
+}
+.todo-progress {
+  margin-bottom: 20px;
+}
+.todo-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+.todo-progress-label strong {
+  color: var(--signal);
+  font-variant-numeric: tabular-nums;
+}
+.todo-progress progress {
+  display: block;
+  appearance: none;
+  width: 100%;
+  height: 10px;
+  border: 0;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--rule);
+  accent-color: var(--signal);
+}
+.todo-progress progress::-webkit-progress-bar {
+  background: var(--rule);
+}
+.todo-progress progress::-webkit-progress-value {
+  background: var(--signal);
+}
+.todo-progress progress::-moz-progress-bar {
+  background: var(--signal);
+}
+.todo-progress p {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.todo-table-scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+.todo-table-scroll table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+.todo-table-scroll th:nth-child(3) {
+  width: 40%;
+}
+.todo-view-controls {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.todo-view-controls [aria-pressed='true'] {
+  color: var(--signal);
+  border-color: var(--signal);
+}
+.todo-group-toolbar,
+.todo-group-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.todo-group-toolbar {
+  margin-bottom: 12px;
+}
+.todo-group-toolbar p {
+  margin: 0;
+}
+.todo-group-toolbar label {
+  max-width: 100%;
+}
+.todo-time-caveat,
+.todo-group-detail > .muted {
+  font-size: 12px;
+}
+.todo-group-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.todo-group {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  min-width: 0;
+}
+.todo-group summary {
+  display: block;
+  padding: 14px;
+  overflow-wrap: anywhere;
+  list-style: none;
+}
+.todo-group summary::-webkit-details-marker {
+  display: none;
+}
+.todo-group-heading > strong::before {
+  content: '+ ';
+  color: var(--signal);
+}
+.todo-group[open] .todo-group-heading > strong::before {
+  content: '- ';
+}
+.todo-group-heading > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.todo-group .todo-progress {
+  display: block;
+  margin: 12px 0;
+}
+.todo-status-counts,
+.todo-group-range {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.todo-group-range {
+  margin-top: 12px;
+}
+.todo-group-warning {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #f0c899;
+}
+.todo-group-detail {
+  border-top: 1px solid var(--rule);
+  padding: 14px;
+  min-width: 0;
+}
+.todo-group-detail h4 {
+  margin: 18px 0 10px;
+  font-size: 14px;
+}
+.todo-group-detail h4:first-child {
+  margin-top: 0;
+}
+.todo-data-notice {
+  padding: 12px;
+  border-left: 2px solid #f0c899;
+  color: var(--muted);
+  font-size: 13px;
+}
+.todo-diagram-scroll {
+  overflow: auto;
+  max-width: 100%;
+  max-height: 480px;
+}
+.todo-diagram-scroll svg {
+  display: block;
+  color: var(--muted);
+}
+.todo-graph-edge {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 1.5;
+}
+.todo-graph-node {
+  fill: #142338;
+  stroke: var(--rule);
+}
+.todo-node-done {
+  stroke: var(--signal);
+}
+.todo-graph-title {
+  color: #e6edf7;
+  font-size: 12px;
+  line-height: 18px;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.todo-graph-meta,
+.todo-graph-created,
+.todo-graph-status {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .path {
   overflow-wrap: anywhere;

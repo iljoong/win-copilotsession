@@ -29,6 +29,22 @@ files referenced by the original design are not required for this handoff.
 
 ## Desktop documentation and explicit releases
 
+The user explicitly authorized version **0.2.0**, commit/push and release on
+2026-11-17. [The release plan](superpowers/plans/2026-11-17-v0.2.0-release.md)
+covers the accumulated TODO reader, detail tabs/progress, dependency groups and
+Dependencies-only cards below. VERSION.md now records 0.2.0 above intact 0.1.0
+history; npm metadata is synchronized, and dependency pins are unchanged.
+Publication is through the exact-SHA main/VERSION.md workflow, with immutable
+releases enabled. Local verification alone is not proof of hosted publication.
+
+Fresh 0.2.0 local verification passed 156 unit tests, typecheck/lint, 14 Chromium
+workflows, 57 shell tests, C# format, Release packaging and nine WebView2 workflows.
+The exact staged LF snapshot passes standard Prettier and C# formatting without
+normalizing unrelated CRLF files. Defender reported zero events and complete
+cleanup (8.60-second cold / 1.33-second warm startup). The 113,388,595-byte ZIP
+has native product version 0.2.0 and all 34 packaged dist hashes match the tested
+build. Publication must still be confirmed in the exact-SHA hosted workflow.
+
 The approved [documentation/release design](superpowers/specs/2026-11-13-desktop-readme-version-release-design.md)
 was implemented on `feature/desktop-docs-version-releases`. The user subsequently
 authorized committing/pushing to main and triggering the initial 0.1.0 Release
@@ -36,7 +52,7 @@ workflow, without a version increment. Root README is Desktop-first; detailed or
 under `manual`, with development/testing/release guides and an inspected actual
 Release-window PNG containing synthetic snapshots only.
 
-Root VERSION.md starts at 0.1.0 and supplies native title/metadata, ZIP name,
+Root VERSION.md was introduced with 0.1.0 and supplies native title/metadata, ZIP name,
 tag and release notes. `version:sync` updates npm/lock projections only after an
 explicit version request; normal builds never increment or edit history.
 The nearest desktop props import root props, and validation independently checks
@@ -149,6 +165,77 @@ restart unless the development watcher handles it.
 
 ### Sessions and conversation
 
+- The user-requested [session detail tabs and TODO completion](superpowers/specs/2026-11-17-session-detail-tabs-design.md)
+  supersede the earlier [TODO expanders](superpowers/specs/2026-11-17-session-todo-status-design.md).
+  Conversation (default), Session Info and Todo status are accessible tabs with
+  Arrow/Home/End navigation. `src\client\session-todos.tsx` polls
+  `/api/sessions/:id/todos` only while its tab is active.
+  It shows the four source fields, orders `created_at DESC, id DESC` (undated
+  last), supports 50-row pagination and resets page
+  state on session changes. Missing/disabled/non-CLI/unsupported data is distinct
+  from an empty TODO table. Source status does not change observed session state.
+  The all-table `completed` response counts exact `done` statuses; the progress
+  bar/percentage and done/total counts do not depend on pagination. Empty or
+  unavailable data has no bar/percentage. Detail-tab switches preserve TODO page
+  and Conversation settings; a matching prompt search reveals Conversation.
+  `Store.getCliHistorySession` resolves the original CLI reference from records
+  and enabled source configuration; browser paths and hashed IDs are not used
+  as filesystem references. `src\server\sources\todos.ts` bounds source DB/WAL
+  reads to 64 MiB combined, validates root/session/file boundaries, and opens only
+  a temporary snapshot in SQLite so original DB/WAL/SHM files stay untouched.
+  Snapshots are removed in `finally`; crashes can leave files in user TEMP.
+  TODO fields are never indexed or retained in dashboard SQLite. API regressions
+  in `tests\routes.test.ts`, UI regressions in `tests\sessions.test.tsx`, and the
+  `todoStatus` browser workflow cover selection, WAL updates, unchanged sources,
+  unavailable/empty distinctions, inert text, global completion, descending
+  pagination, keyboard and layout. The WebView2 live-refresh workflow also checks
+  TODO completion updates.
+
+- The [dependency-group follow-up](superpowers/specs/2026-11-17-todo-groups-design.md)
+  extends that TODO UI. Groups is now the default, with All tasks preserving
+  the flat list. Both include nullable source `updated_at`. The authenticated
+  `/api/sessions/:id/todo-groups` endpoint uses the same safe snapshot callback
+  (`withTodoSnapshot`) and `src\server\sources\todo-groups.ts` to aggregate
+  weakly connected components before group pagination. A group page contains
+  20 summaries plus at most one requested group's 50-row task detail.
+  Exact done counts/status distributions cover every member. Default group
+  order is latest modification descending; creation descending is available.
+  ID prefixes only name already established components.
+  `src\shared\todo-time.ts` preserves unspecified source clocks versus explicit
+  instants, refusing unknown numeric units and invalid/mixed/inverted spans.
+  Creation-to-last-update spans are not execution durations.
+  Equal endpoints are labeled same-time records.
+  `src\client\todo-groups.tsx` keeps expansion/order/pages across polling and
+  detail-tab changes; `todo-group-visuals.tsx` renders inert local SVG.
+  The user's card simplification removes Last modification timeline and
+  Task details, leaving only Dependencies in expanded cards. Each graph node
+  keeps its title and shows ID, raw `created_at` (or Unavailable), then status.
+  All tasks retains the separate full table; the grouped API's existing
+  detail-page fields remain compatible but are no longer used by the card UI.
+  Only the active view polls.
+  Completed groups start closed; initially the first unfinished group opens;
+  one group opens at a time. Session changes reset all TODO view state.
+  Missing dependency metadata explicitly warns rather than proving independence.
+  Duplicate edges are deduplicated, dangling endpoints warn without phantom
+  members, and cycles omit the graph but retain group summaries and All tasks.
+  Grouping refuses over 10,000 tasks/50,000 dependency rows instead of returning
+  partial components; graphs above 80 nodes/400 edges are omitted with a notice.
+  Flat paging remains available beyond grouping limits.
+  `tests\todo-time.test.ts` and the routes/sessions/browser/native TODO workflows
+  cover the added behavior. No real history is needed for these regressions.
+  Initial local group verification: 156 unit tests, typecheck/lint, 14 browser
+  workflows, 57 shell tests, C# formatting, Release packaging and nine WebView2
+  workflows passed. Defender reported zero events with complete cleanup.
+  The local 0.1.0 ZIP's grouped reader/time module and client asset hashes match
+  tested dist; relaunch the app to use it. Standard Prettier still flags 67
+  untouched CRLF files; changed files and `--end-of-line auto` pass. One independent
+  final review found no actionable correctness/regression issues.
+  The Dependencies-only card follow-up passed the same complete unit/static,
+  browser and Windows/package gates, with zero Defender events and cleanup.
+  Metadata order/box fit, removed sections, full bounded graph membership and
+  missing/zero creation times have focused regressions. The local 0.1.0 ZIP
+  was rebuilt for this follow-up; relaunch the updated app.
+
 - Session-first two-pane layout with source/state/model/date filters, usage sorts,
   full original-prompt/title search, and matching-prompt navigation/highlighting.
 - The approved [conversation-focused UI follow-up](superpowers/specs/2026-11-13-conversation-focused-sessions-ui-design.md)
@@ -171,10 +258,11 @@ restart unless the development watcher handles it.
   collapsed by default. Its summary keeps the active filter count visible;
   closing clears only the nested editor, not query values or selection.
   Expansion survives session changes, SSE refresh, and Hide/Show.
-- Session information and all eight usage fields share one native
-  collapsed-by-default expander. Title/state/scope, stale observations, and
-  coverage warning counts remain outside; expansion survives session changes
-  and same-session refreshes within the mounted page.
+- Session Info holds metadata and all eight usage fields without an expander.
+  Title/state/scope and stale observations remain outside the tab panels.
+  The Data coverage and limitations disclosure is removed from session details;
+  source/usage warnings remain stored and per-metric partial/unavailable labels
+  and the Sources/Usage pages are unchanged.
 - Conversation prompt/preview bodies use the available panel width. Original
   prompts cap at ten rendered line heights, not source-newline count, and scroll
   internally without truncation. Short prompts retain natural height. Search
@@ -196,12 +284,13 @@ restart unless the development watcher handles it.
   selected direction; undated entries stay last.
 - Original prompt bodies are yellow. Model badges distinguish GPT (mint), Claude
   (peach), and other models (lavender).
-- Observed activity is a collapsed-by-default native details expander. It shows
+- Observed activity in Conversation is a collapsed-by-default native details expander. It shows
   exported event counts/times and freshness, not fabricated running progress.
   An opened expander survives live refreshes of the same selected session.
 
-Conversation and pane/expander settings are component state, not persistent preferences. Switching
-tabs remounts the page. List/search filters and selected session are reflected in
+Conversation, detail-tab and pane/filter-expander settings are component state,
+not persistent preferences. Switching top-level pages remounts the Sessions
+page; switching detail tabs does not. List/search filters and selected session are reflected in
 the URL; do not assume all display controls are saved there.
 
 ### Sources and live ingestion

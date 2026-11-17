@@ -8,6 +8,7 @@ import type {
   MetricKey,
 } from '../shared/contracts.js';
 import { apiRequest, subscribeChanges } from './api.js';
+import { SessionTodosPanel } from './session-todos.js';
 
 const stateNames = {
   active: 'Active (observed)',
@@ -24,6 +25,12 @@ const sourceNames = {
   'vscode-telemetry': 'VS Code telemetry',
 };
 type FilterEditor = 'source' | 'state' | 'model' | 'date';
+const detailTabs = [
+  { id: 'conversation', label: 'Conversation' },
+  { id: 'info', label: 'Session Info' },
+  { id: 'todos', label: 'Todo status' },
+] as const;
+type DetailTab = (typeof detailTabs)[number]['id'];
 function SessionIcon({
   kind,
 }: {
@@ -186,7 +193,7 @@ export function SessionsPage({
   const [entryLimit, setEntryLimit] = useState(25);
   const [hideEmptyPreviews, setHideEmptyPreviews] = useState(true);
   const [entryOrder, setEntryOrder] = useState<'asc' | 'desc'>('desc');
-  const [overviewOpen, setOverviewOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<DetailTab>('conversation');
   const [filterEditor, setFilterEditor] = useState<FilterEditor | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [listVisible, setListVisible] = useState(true);
@@ -300,6 +307,8 @@ export function SessionsPage({
         const searchKey = `${current?.id}:${query}:${entryLimit}:${hideEmptyPreviews}:${entryOrder}`;
         if (focusedSearch.current !== searchKey) {
           focusedSearch.current = searchKey;
+          if (query.trim() && current?.matchedEntryId)
+            setDetailTab('conversation');
           setEntryOffset(
             Math.floor((current?.matchedEntryOffset ?? 0) / entryLimit) *
               entryLimit,
@@ -787,12 +796,50 @@ export function SessionsPage({
               <header className="detail-heading">
                 <h2>{summary.title}</h2>
               </header>
-              <details
-                className="session-overview"
-                open={overviewOpen}
-                onToggle={(event) => setOverviewOpen(event.currentTarget.open)}
+              <div
+                className="session-detail-tabs"
+                role="tablist"
+                aria-label="Session details"
               >
-                <summary>Session information and usage</summary>
+                {detailTabs.map((tab, index) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    id={`session-tab-${tab.id}`}
+                    role="tab"
+                    aria-selected={detailTab === tab.id}
+                    aria-controls={`session-panel-${tab.id}`}
+                    tabIndex={detailTab === tab.id ? 0 : -1}
+                    onClick={() => setDetailTab(tab.id)}
+                    onKeyDown={(event) => {
+                      let next: number;
+                      if (event.key === 'ArrowRight')
+                        next = (index + 1) % detailTabs.length;
+                      else if (event.key === 'ArrowLeft')
+                        next =
+                          (index + detailTabs.length - 1) % detailTabs.length;
+                      else if (event.key === 'Home') next = 0;
+                      else if (event.key === 'End')
+                        next = detailTabs.length - 1;
+                      else return;
+                      event.preventDefault();
+                      const target = detailTabs[next].id;
+                      setDetailTab(target);
+                      document.getElementById(`session-tab-${target}`)?.focus();
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <section
+                className="session-info"
+                id="session-panel-info"
+                role="tabpanel"
+                aria-labelledby="session-tab-info"
+                hidden={detailTab !== 'info'}
+                tabIndex={0}
+              >
                 <div className="detail-heading">
                   <h3>Session information</h3>
                   <p>
@@ -836,240 +883,242 @@ export function SessionsPage({
                     <dd>{duration(summary.usage.wallMs)}</dd>
                   </div>
                 </dl>
-              </details>
-              {[...new Set([...detail!.warnings, ...summary.usage.warnings])]
-                .length > 0 && (
-                <details className="coverage">
-                  <summary>
-                    Data coverage and limitations (
-                    {
-                      new Set([...detail!.warnings, ...summary.usage.warnings])
-                        .size
-                    }{' '}
-                    warnings)
-                  </summary>
-                  {[
-                    ...new Set([
-                      ...detail!.warnings,
-                      ...summary.usage.warnings,
-                    ]),
-                  ].map((warning) => (
-                    <p key={warning}>{warning}</p>
-                  ))}
-                </details>
-              )}
-              <section aria-label="Conversation">
-                <div className="section-heading">
-                  <h3>Conversation</h3>
-                  <span className="muted">
-                    Full prompts. Text-only response previews.
-                  </span>
-                </div>
-                <div className="conversation-controls">
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={hideEmptyPreviews}
-                      onChange={(event) => {
-                        setHideEmptyPreviews(event.target.checked);
-                        setEntryOffset(0);
-                      }}
-                    />
-                    Hide empty assistant previews
-                  </label>
-                  <div className="conversation-page-controls">
-                    <label className="entry-limit">
-                      Entries per page
-                      <select
-                        value={entryLimit}
+              </section>
+              <section
+                id="session-panel-todos"
+                role="tabpanel"
+                aria-labelledby="session-tab-todos"
+                hidden={detailTab !== 'todos'}
+                tabIndex={0}
+              >
+                <SessionTodosPanel
+                  key={`todos:${summary.id}`}
+                  sessionId={summary.id}
+                  active={detailTab === 'todos'}
+                />
+              </section>
+              <div
+                id="session-panel-conversation"
+                role="tabpanel"
+                aria-labelledby="session-tab-conversation"
+                hidden={detailTab !== 'conversation'}
+                tabIndex={0}
+              >
+                <section aria-label="Conversation">
+                  <div className="section-heading">
+                    <h3>Conversation</h3>
+                    <span className="muted">
+                      Full prompts. Text-only response previews.
+                    </span>
+                  </div>
+                  <div className="conversation-controls">
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        checked={hideEmptyPreviews}
                         onChange={(event) => {
-                          setEntryLimit(Number(event.target.value));
+                          setHideEmptyPreviews(event.target.checked);
                           setEntryOffset(0);
                         }}
-                      >
-                        {[25, 50, 100, 150].map((count) => (
-                          <option key={count} value={count}>
-                            {count}
-                          </option>
-                        ))}
-                      </select>
+                      />
+                      Hide empty assistant previews
                     </label>
-                    <div
-                      className="conversation-order"
-                      role="group"
-                      aria-label="Conversation order"
-                    >
-                      {(['desc', 'asc'] as const).map((order) => {
-                        const label =
-                          order === 'desc'
-                            ? 'Descending (newest first)'
-                            : 'Ascending (oldest first)';
-                        return (
-                          <button
-                            key={order}
-                            type="button"
-                            aria-label={label}
-                            title={label}
-                            aria-pressed={entryOrder === order}
-                            onClick={() => {
-                              setEntryOrder(order);
-                              setEntryOffset(0);
-                            }}
-                          >
-                            <svg
-                              width="16"
-                              height="16"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              aria-hidden="true"
-                              focusable="false"
+                    <div className="conversation-page-controls">
+                      <label className="entry-limit">
+                        Entries per page
+                        <select
+                          value={entryLimit}
+                          onChange={(event) => {
+                            setEntryLimit(Number(event.target.value));
+                            setEntryOffset(0);
+                          }}
+                        >
+                          {[25, 50, 100, 150].map((count) => (
+                            <option key={count} value={count}>
+                              {count}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <div
+                        className="conversation-order"
+                        role="group"
+                        aria-label="Conversation order"
+                      >
+                        {(['desc', 'asc'] as const).map((order) => {
+                          const label =
+                            order === 'desc'
+                              ? 'Descending (newest first)'
+                              : 'Ascending (oldest first)';
+                          return (
+                            <button
+                              key={order}
+                              type="button"
+                              aria-label={label}
+                              title={label}
+                              aria-pressed={entryOrder === order}
+                              onClick={() => {
+                                setEntryOrder(order);
+                                setEntryOffset(0);
+                              }}
                             >
-                              <path
-                                d={
-                                  order === 'desc'
-                                    ? 'M12 5v14m-5-5 5 5 5-5'
-                                    : 'M12 19V5m-5 5 5-5 5 5'
-                                }
-                              />
-                            </svg>
-                          </button>
-                        );
-                      })}
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                aria-hidden="true"
+                                focusable="false"
+                              >
+                                <path
+                                  d={
+                                    order === 'desc'
+                                      ? 'M12 5v14m-5-5 5 5 5-5'
+                                      : 'M12 19V5m-5 5 5-5 5 5'
+                                  }
+                                />
+                              </svg>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
-                </div>
-                <p role="status" className="notice">
-                  {notice}
-                </p>
-                {entries?.items.map((entry, index) => (
-                  <article
-                    key={entry.id}
-                    className={`conversation-entry ${entry.role === 'original-user' ? 'user-entry' : 'assistant-entry'} ${entry.id === matched ? 'search-match' : ''}`}
-                    aria-label={
-                      entry.role === 'original-user'
-                        ? `Original prompt ${entryOffset + index + 1}`
-                        : `Assistant preview ${entryOffset + index + 1}`
-                    }
-                  >
-                    <header>
-                      <span>
-                        {entry.role === 'original-user'
-                          ? 'Original user prompt'
-                          : 'Assistant preview'}
-                      </span>
-                      <span className="muted">{stamp(entry.timestamp)}</span>
-                      {entry.role === 'original-user' && (
-                        <button
-                          aria-label={`Copy prompt ${entryOffset + index + 1}`}
-                          onClick={() => void copyPrompt(entry.text)}
-                        >
-                          Copy
-                        </button>
-                      )}
-                    </header>
-                    <pre
-                      role={
-                        entry.role === 'original-user' ? 'region' : undefined
-                      }
+                  <p role="status" className="notice">
+                    {notice}
+                  </p>
+                  {entries?.items.map((entry, index) => (
+                    <article
+                      key={entry.id}
+                      className={`conversation-entry ${entry.role === 'original-user' ? 'user-entry' : 'assistant-entry'} ${entry.id === matched ? 'search-match' : ''}`}
                       aria-label={
                         entry.role === 'original-user'
-                          ? `Original prompt ${entryOffset + index + 1} text`
-                          : undefined
+                          ? `Original prompt ${entryOffset + index + 1}`
+                          : `Assistant preview ${entryOffset + index + 1}`
                       }
-                      tabIndex={entry.role === 'original-user' ? 0 : undefined}
-                      ref={(body) => {
-                        if (
-                          !body ||
-                          entry.role !== 'original-user' ||
-                          entry.id !== matched ||
-                          !query.trim()
-                        )
-                          return;
-                        const key = `${selected}:${matched}:${query}`;
-                        if (revealedMatches.current.get(body) === key) return;
-                        revealPromptMatch(body, query);
-                        revealedMatches.current.set(body, key);
-                      }}
                     >
-                      {entry.role === 'original-user'
-                        ? entry.text
-                        : Array.from(entry.text).slice(0, 1000).join('')}
-                    </pre>
-                    {(entry.truncated ||
-                      (entry.role === 'assistant-preview' &&
-                        Array.from(entry.text).length > 1000)) && (
-                      <p className="muted">
-                        Preview truncated at 1,000 characters.
-                      </p>
-                    )}
-                  </article>
-                ))}
-                {entries?.total === 0 && (
+                      <header>
+                        <span>
+                          {entry.role === 'original-user'
+                            ? 'Original user prompt'
+                            : 'Assistant preview'}
+                        </span>
+                        <span className="muted">{stamp(entry.timestamp)}</span>
+                        {entry.role === 'original-user' && (
+                          <button
+                            aria-label={`Copy prompt ${entryOffset + index + 1}`}
+                            onClick={() => void copyPrompt(entry.text)}
+                          >
+                            Copy
+                          </button>
+                        )}
+                      </header>
+                      <pre
+                        role={
+                          entry.role === 'original-user' ? 'region' : undefined
+                        }
+                        aria-label={
+                          entry.role === 'original-user'
+                            ? `Original prompt ${entryOffset + index + 1} text`
+                            : undefined
+                        }
+                        tabIndex={
+                          entry.role === 'original-user' ? 0 : undefined
+                        }
+                        ref={(body) => {
+                          if (
+                            !body ||
+                            entry.role !== 'original-user' ||
+                            entry.id !== matched ||
+                            !query.trim()
+                          )
+                            return;
+                          const key = `${selected}:${matched}:${query}`;
+                          if (revealedMatches.current.get(body) === key) return;
+                          revealPromptMatch(body, query);
+                          revealedMatches.current.set(body, key);
+                        }}
+                      >
+                        {entry.role === 'original-user'
+                          ? entry.text
+                          : Array.from(entry.text).slice(0, 1000).join('')}
+                      </pre>
+                      {(entry.truncated ||
+                        (entry.role === 'assistant-preview' &&
+                          Array.from(entry.text).length > 1000)) && (
+                        <p className="muted">
+                          Preview truncated at 1,000 characters.
+                        </p>
+                      )}
+                    </article>
+                  ))}
+                  {entries?.total === 0 && (
+                    <p className="muted">
+                      {hideEmptyPreviews
+                        ? 'No conversation entries match these display settings.'
+                        : 'Original prompts are unavailable from this source. Import a chat export to browse and reuse them.'}
+                    </p>
+                  )}
+                  {entries && (
+                    <Pagination
+                      offset={entryOffset}
+                      total={entries.total}
+                      limit={entryLimit}
+                      onChange={setEntryOffset}
+                      label="Conversation pages"
+                    />
+                  )}
+                </section>
+                <details className="activity" key={summary.id}>
+                  <summary>
+                    <span className="activity-title">Observed activity</span>
+                    <span className="muted">
+                      {detail!.counts.modelCalls} model calls /{' '}
+                      {detail!.counts.toolCalls} tool calls observed
+                    </span>
+                  </summary>
                   <p className="muted">
-                    {hideEmptyPreviews
-                      ? 'No conversation entries match these display settings.'
-                      : 'Original prompts are unavailable from this source. Import a chat export to browse and reuse them.'}
+                    Export delivery can lag. Completed spans do not prove a tool
+                    is currently running.
                   </p>
-                )}
-                {entries && (
-                  <Pagination
-                    offset={entryOffset}
-                    total={entries.total}
-                    limit={entryLimit}
-                    onChange={setEntryOffset}
-                    label="Conversation pages"
-                  />
-                )}
-              </section>
-              <details className="activity" key={summary.id}>
-                <summary>
-                  <span className="activity-title">Observed activity</span>
-                  <span className="muted">
-                    {detail!.counts.modelCalls} model calls /{' '}
-                    {detail!.counts.toolCalls} tool calls observed
-                  </span>
-                </summary>
-                <p className="muted">
-                  Export delivery can lag. Completed spans do not prove a tool
-                  is currently running.
-                </p>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Source time</th>
-                      <th>Observed event</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {activity?.items.map((event) => (
-                      <tr key={event.id}>
-                        <td>
-                          <time>{stamp(event.timestamp)}</time>
-                        </td>
-                        <td>
-                          {event.label}
-                          <small>Ingested {stamp(event.observedAt)}</small>
-                        </td>
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Source time</th>
+                        <th>Observed event</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!activity?.total && (
-                  <p className="muted">
-                    No activity events are available for this session.
-                  </p>
-                )}
-                {!!activity?.total && (
-                  <p className="muted">
-                    Latest {activity.items.length} of {activity.total} observed
-                    events.
-                  </p>
-                )}
-              </details>
+                    </thead>
+                    <tbody>
+                      {activity?.items.map((event) => (
+                        <tr key={event.id}>
+                          <td>
+                            <time>{stamp(event.timestamp)}</time>
+                          </td>
+                          <td>
+                            {event.label}
+                            <small>Ingested {stamp(event.observedAt)}</small>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {!activity?.total && (
+                    <p className="muted">
+                      No activity events are available for this session.
+                    </p>
+                  )}
+                  {!!activity?.total && (
+                    <p className="muted">
+                      Latest {activity.items.length} of {activity.total}{' '}
+                      observed events.
+                    </p>
+                  )}
+                </details>
+              </div>
             </>
           )}
         </div>

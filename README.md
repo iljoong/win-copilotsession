@@ -60,9 +60,19 @@ Open **Sources** and choose what to read. Nothing is enabled automatically.
   before enabling content capture.
 
 In **Sessions**, the sidebar icon hides/shows the list. Search and filters start
-collapsed. Session information/usage expand together; conversations use the
-available width. Long original prompts scroll after ten displayed lines, but
+collapsed. The selected session has **Conversation** (default), **Session Info**
+and **Todo status** tabs. Long original prompts scroll after ten displayed lines, but
 **Copy** preserves the complete original text. Assistant previews are inert text.
+
+**Todo status** groups CLI TODOs by dependency links, including standalone tasks.
+Group cards show completion, source statuses and creation-to-last-update spans,
+latest modified first (creation ordering is also available). Expand a group for
+only its dependency graph, with each task's title, ID, source creation time and
+status. **All tasks** retains the newest-created-first table. Spans are not execution durations.
+Progress is `done / all TODOs`, including off-page rows. Only the active view
+refreshes. An enabled CLI-history source and readable `session.db` are required;
+missing dependency/timing data is labeled, and empty/unavailable TODO data has
+no completion percentage.
 
 **Usage** shows recorded values and coverage, not estimated billing. Missing
 metrics are not zero, and an idle turn is not a completed session.
@@ -80,6 +90,11 @@ This includes full prompts, so protect it like your Copilot history. Native logs
 and the WebView2 profile are in the sibling `desktop` folder. Nothing is written
 inside the extracted app folder. Local authentication does not isolate data from
 other processes running as your Windows user.
+
+TODO reads use disposable DB/WAL copies in your user temporary directory to
+leave original SQLite sidecars untouched. Only the five TODO fields and dependency
+links are queried for display;
+copies are removed after each read, but a crash can leave temporary files.
 
 **Clear local data** requires confirmation, clears dashboard records and disables
 sources, but never deletes original history/exports. It is not secure disk erasure.

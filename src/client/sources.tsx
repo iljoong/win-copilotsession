@@ -149,8 +149,10 @@ export function SourcesPage() {
               />
             </label>
             <p className="muted">
-              CLI history reads session folders. Telemetry reads only the file
-              you choose. Source files are never modified.
+              CLI history reads session folders, including session.db TODOs,
+              update times and dependency links when you select Todo status.
+              Telemetry reads only the file you choose. Source files are never
+              modified.
             </p>
             <label className="checkbox">
               <input
