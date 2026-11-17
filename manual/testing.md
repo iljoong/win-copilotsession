@@ -31,6 +31,13 @@ Version/release regressions additionally cover invalid/duplicate history,
 explicit synchronization, native metadata disagreement, published-version refusal,
 foreign-commit tags, upload failure and same-commit draft retry.
 
+The Vitest suite includes real Windows ACL/PowerShell checks, three MSBuild
+invocations and multi-poll TODO UI scenarios. Its bounded per-test budget is
+30 seconds to accommodate cold hosted runners. TODO sorting waits for its
+asynchronous response for up to four seconds, like the existing TODO refresh
+assertions. These are test-runner budgets, not relaxed application latency
+requirements; browser/WebView2 complete-record latency checks are unchanged.
+
 ## Windows Desktop gates
 
 ```powershell

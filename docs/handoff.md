@@ -45,6 +45,18 @@ cleanup (8.60-second cold / 1.33-second warm startup). The 113,388,595-byte ZIP
 has native product version 0.2.0 and all 34 packaged dist hashes match the tested
 build. Publication must still be confirmed in the exact-SHA hosted workflow.
 
+The initial 0.2.0 push (`80a52b6`, run `44092049478`) stopped before publication:
+four unit tests exceeded cold-runner timing budgets (Windows ACL 24.97s,
+three MSBuild calls 11.58s, a 51-node multi-poll graph scenario at 10s, and a
+one-second sort-response wait). The graph timeout also interrupted fixture
+cleanup, causing a secondary EBUSY. All 55 affected-file tests pass locally.
+The test-only correction uses a bounded 30-second integration-test deadline
+and a four-second sort-response wait; no assertion, security check or browser/
+WebView2 latency criterion is removed. All 156 unit tests, typecheck and lint
+pass after the correction. The user explicitly authorized a corrective push
+and manual release dispatch against its new main SHA without another version
+change. Preflight still finds no 0.2.0 tag/draft; retain immutable releases.
+
 The approved [documentation/release design](superpowers/specs/2026-11-13-desktop-readme-version-release-design.md)
 was implemented on `feature/desktop-docs-version-releases`. The user subsequently
 authorized committing/pushing to main and triggering the initial 0.1.0 Release

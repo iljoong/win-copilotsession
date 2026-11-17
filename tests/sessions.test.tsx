@@ -225,10 +225,12 @@ test('todoCardsShowOnlyDependenciesWithIdCreationTimeAndStatus', async () => {
     await user.click(screen.getByRole('tab', { name: 'Todo status' }));
     expect(job).toHaveAttribute('open');
     await user.selectOptions(screen.getByLabelText('Group order'), 'created');
-    await waitFor(() =>
-      expect(
-        screen.getAllByRole('group', { name: /^TODO group / })[0],
-      ).toHaveAccessibleName('TODO group Standalone'),
+    await waitFor(
+      () =>
+        expect(
+          screen.getAllByRole('group', { name: /^TODO group / })[0],
+        ).toHaveAccessibleName('TODO group Standalone'),
+      { timeout: 4000 },
     );
     await user.click(
       within(
