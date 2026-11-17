@@ -287,12 +287,36 @@ test('todoDependencyCardsRefreshAllNodesAndPreserveExpansionAcrossTabs', async (
       name: 'Dependency graph for task',
     });
     expect(within(graph).getByText('task-000')).toBeVisible();
-    db.exec("DELETE FROM todos WHERE id='task-050'");
+    harness.store.saveSource({
+      id: 'source',
+      kind: 'cli-history',
+      enabled: false,
+      path: join(harness.root, 'history'),
+    });
     await waitFor(
-      () => expect(within(graph).queryByText('task-050')).toBeNull(),
+      () =>
+        expect(
+          screen.queryByRole('img', { name: 'Dependency graph for task' }),
+        ).toBeNull(),
       { timeout: 4000 },
     );
-    expect(within(graph).getByText('task-049')).toBeVisible();
+    harness.store.saveSource({
+      id: 'source',
+      kind: 'cli-history',
+      enabled: true,
+      path: join(harness.root, 'history'),
+    });
+    db.exec("DELETE FROM todos WHERE id='task-050'");
+    await waitFor(
+      () => {
+        graph = screen.getByRole('img', {
+          name: 'Dependency graph for task',
+        });
+        expect(within(graph).queryByText('task-050')).toBeNull();
+        expect(within(graph).getByText('task-049')).toBeVisible();
+      },
+      { timeout: 4000 },
+    );
     db.exec('DROP TABLE todo_deps; ALTER TABLE todos DROP COLUMN updated_at;');
     await waitFor(
       () =>

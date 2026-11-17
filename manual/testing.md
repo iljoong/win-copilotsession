@@ -38,6 +38,10 @@ asynchronous response for up to four seconds, like the existing TODO refresh
 assertions. These are test-runner budgets, not relaxed application latency
 requirements; browser/WebView2 complete-record latency checks are unchanged.
 
+Polling assertions re-query the currently rendered graph after source
+unavailability/recovery: a safe snapshot refusal can unmount an old SVG.
+Retaining that detached node tests stale DOM rather than the visible result.
+
 ## Windows Desktop gates
 
 ```powershell

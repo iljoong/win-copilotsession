@@ -57,6 +57,15 @@ pass after the correction. The user explicitly authorized a corrective push
 and manual release dispatch against its new main SHA without another version
 change. Preflight still finds no 0.2.0 tag/draft; retain immutable releases.
 
+Manual retry `44094446228` at `38bff5e` passed 155 tests and exposed one stale-DOM
+assertion. When a changing source safely invalidates a snapshot, the graph can
+unmount; the test kept checking its detached SVG. A source-disable/re-enable
+fixture reproduced that exact failure locally, then passed after re-querying
+the current graph within waitFor. Deleted-node absence, surviving-node presence,
+source clearing, schema warnings and tab-state checks are all retained. The full
+156 tests, typecheck and lint pass after this test-only correction; the next
+manual dispatch must target its new main SHA, still at unpublished 0.2.0.
+
 The approved [documentation/release design](superpowers/specs/2026-11-13-desktop-readme-version-release-design.md)
 was implemented on `feature/desktop-docs-version-releases`. The user subsequently
 authorized committing/pushing to main and triggering the initial 0.1.0 Release
