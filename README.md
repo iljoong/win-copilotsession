@@ -6,7 +6,7 @@ usage in one local-only window.
 
 ## Desktop example
 
-![Copilot Session Dashboard Desktop window showing synthetic sessions and a conversation](manual/images/desktop-session-dashboard.png)
+![Copilot Session Dashboard Desktop window showing synthetic sessions and a conversation](manual/images/desktop-session-dashboard.gif)
 
 Synthetic example captured from the actual Release app using
 `CopilotSessionDashboard (Defender ASR).cmd`, with isolated temporary data.
