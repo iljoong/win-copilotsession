@@ -75,6 +75,7 @@ test('cacheShareDisplaysOnlyCompatibleDenominator', async () => {
   expect(
     screen.getByText(/60 cached \/ 100 compatible input tokens/),
   ).toBeInTheDocument();
+  expect(screen.queryByText('Recorded agent time')).not.toBeInTheDocument();
 });
 test('tokenSubsetsAreNotAddedTwice', async () => {
   seed('one', { input: 100, output: 20, cacheRead: 60, reasoning: 5 });

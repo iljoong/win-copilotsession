@@ -4,6 +4,19 @@ The first version entry is current. Add a new entry above previous entries only
 when an explicit next-version or specific-version request is approved. Ordinary
 commits, pushes, builds, and releases never increment the version.
 
+## 0.3.0
+
+Date: 2026-11-21
+
+- Show the stored Copilot CLI session title in the sidebar and keep observed
+  state separate. Pick up renamed sessions without waiting for new events.
+- Show the first model plus the number of other models, and replace Recorded
+  agent time with Wall Time in the session list and sort controls.
+- Add the session title, source session ID and cache-read percentage to Session
+  Info. Remove Recorded agent time from the Usage overview.
+- Animate the blue outline of in-progress tasks in the dependency graph, with
+  a steady outline when reduced motion is enabled.
+
 ## 0.2.0
 
 Date: 2026-11-17

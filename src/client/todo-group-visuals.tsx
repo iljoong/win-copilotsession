@@ -91,11 +91,21 @@ function DependencyGraph({ detail }: { detail: TodoGroupDetail }) {
                 {node.status}
               </title>
               <rect
-                className={`todo-graph-node ${node.status === 'done' ? 'todo-node-done' : ''}`}
+                className={`todo-graph-node ${node.status === 'done' ? 'todo-node-done' : node.status === 'in_progress' ? 'todo-node-running' : ''}`}
                 width="240"
                 height="110"
                 rx="5"
               />
+              {node.status === 'in_progress' && (
+                <rect
+                  className="todo-node-running-trace"
+                  width="240"
+                  height="110"
+                  rx="5"
+                  pathLength="100"
+                  aria-hidden="true"
+                />
+              )}
               <foreignObject x="12" y="8" width="216" height="42">
                 <p className="todo-graph-title">{node.title}</p>
               </foreignObject>

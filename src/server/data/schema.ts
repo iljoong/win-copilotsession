@@ -19,6 +19,12 @@ export function migrate(db: DatabaseSync) {
       PRIMARY KEY(session_id, source_id)
     );
     CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS cli_workspace_titles (
+      session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+      source_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      PRIMARY KEY(session_id, source_id)
+    );
     CREATE TABLE IF NOT EXISTS checkpoints (source_id TEXT PRIMARY KEY, value TEXT NOT NULL);
     CREATE VIRTUAL TABLE IF NOT EXISTS prompt_search USING fts5(
       session_id UNINDEXED, entry_id UNINDEXED, text, title

@@ -159,16 +159,6 @@ export function UsagePage() {
                 </div>
               ))}
               <div>
-                <dt>Recorded agent time</dt>
-                <dd>
-                  {formatMetric(
-                    report.totals.agentMs,
-                    report.totals.agentMs === null ? 'unavailable' : 'complete',
-                    'milliseconds',
-                  )}
-                </dd>
-              </div>
-              <div>
                 <dt>Cache-read share</dt>
                 <dd aria-label="Cache-read share">
                   {report.totals.cacheShare === null
@@ -197,11 +187,7 @@ export function UsagePage() {
                 Share uses only records with compatible known input and
                 cache-read counts.
               </p>
-              <p>
-                Agent time uses the union of measured root invocation intervals.
-                Wall span includes waiting and is shown separately in each
-                session; it is not summed here.
-              </p>
+              <p>Session wall time includes waiting and is not summed here.</p>
               <p>
                 These are descriptive usage totals, not a task-quality or
                 efficiency ranking. Compare similar tasks before drawing

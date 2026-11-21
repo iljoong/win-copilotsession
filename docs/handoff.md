@@ -295,7 +295,9 @@ restart unless the development watcher handles it.
   collapsed by default. Its summary keeps the active filter count visible;
   closing clears only the nested editor, not query values or selection.
   Expansion survives session changes, SSE refresh, and Hide/Show.
-- Session Info holds metadata and all eight usage fields without an expander.
+- The sidebar shows the session title, first model plus additional model count,
+  and Wall Time. Session Info includes the title, source session ID and
+  cache-read share. CLI titles use `workspace.yaml` names when available.
   Title/state/scope and stale observations remain outside the tab panels.
   The Data coverage and limitations disclosure is removed from session details;
   source/usage warnings remain stored and per-metric partial/unavailable labels
@@ -368,9 +370,9 @@ the URL; do not assume all display controls are saved there.
 - Existing CLI history is preferred over overlapping telemetry call totals.
   Unidentified VS snapshots are excluded from combined usage, while their
   reported `copilotCredits` can appear as partial per-snapshot credits.
-- Agent time is a union of measured root invocation intervals. Model-call
-  `duration` alone is not total agent time. CLI-history-only sessions can therefore
-  show AIC while agent time remains unavailable. Wall span is a separate measure.
+- The dashboard does not display recorded agent time. Wall Time is the observed
+  session span, not active agent work; model-call `duration` does not supply the
+  latter.
 
 Storage normally uses `%LOCALAPPDATA%\CopilotSessionDashboard\dashboard-data`.
 It contains full prompts and other sensitive history; it is not a distributable

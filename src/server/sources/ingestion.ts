@@ -9,7 +9,7 @@ import type {
   StoreChange,
 } from '../../shared/contracts.js';
 import type { Store } from '../data/store.js';
-import { parseCliRecord } from './cli.js';
+import { parseCliRecord, parseCliWorkspaceTitle } from './cli.js';
 import { parseTelemetryRecord } from './telemetry.js';
 import { readJsonlChunk } from './jsonl.js';
 
@@ -69,6 +69,50 @@ export function createIngestion(options: {
     ino: number;
     birthtimeMs: number;
   }) => `${stat.dev}:${stat.ino}:${stat.birthtimeMs}`;
+
+  async function readWorkspaceTitle(source: SourceConfig, directory: string) {
+    const file = join(directory, 'workspace.yaml');
+    const limit = 64 * 1024;
+    let title: string | null = null;
+    try {
+      const path = await fs.realpath(file);
+      if (path !== file) return;
+      const stat = await fs.lstat(path);
+      if (!stat.isFile() || stat.size > limit) return;
+      const handle = await fs.open(path, 'r');
+      try {
+        const opened = await handle.stat();
+        if (!opened.isFile() || fileIdentity(stat) !== fileIdentity(opened))
+          return;
+        const buffer = Buffer.alloc(Math.min(opened.size + 1, limit + 1));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        const after = await handle.stat();
+        if (
+          bytesRead !== after.size ||
+          opened.mtimeMs !== after.mtimeMs ||
+          bytesRead > limit
+        )
+          return;
+        title = parseCliWorkspaceTitle(buffer.toString('utf8', 0, bytesRead));
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if (!(
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ))
+        return;
+    }
+    const change = store.setCliWorkspaceTitle(
+      source.id,
+      basename(directory),
+      title,
+    );
+    if (change.sessionIds.length) options.onChange(change);
+  }
 
   async function closeReaders(sourceId?: string) {
     for (const [key, reader] of readers) {
@@ -318,6 +362,7 @@ export function createIngestion(options: {
               warnings.push(
                 ...(await tail(source, file, root, basename(directory))),
               );
+              if (!halted) await readWorkspaceTitle(source, directory);
             } catch (error) {
               if (
                 error &&

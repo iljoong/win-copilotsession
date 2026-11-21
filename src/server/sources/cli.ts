@@ -14,6 +14,28 @@ import {
 } from './values.js';
 import { toAssistantPreview } from './vscode.js';
 
+export function parseCliWorkspaceTitle(value: string): string | null {
+  const field = /^name:[ \t]+([^\r\n]*)/m.exec(value.replace(/^\uFEFF/, ''));
+  const raw = field?.[1].trim();
+  if (!raw) return null;
+  // Only the CLI's top-level name scalar is needed; do not parse other metadata.
+  const quoted = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')(?:\s+#.*)?$/.exec(
+    raw,
+  )?.[1];
+  if (quoted?.startsWith("'"))
+    return quoted.slice(1, -1).replaceAll("''", "'").trim() || null;
+  if (quoted) {
+    try {
+      return (JSON.parse(quoted) as string).trim() || null;
+    } catch {
+      return null;
+    }
+  }
+  if (/^["'#|>[{&*!%@`]/.test(raw) || /^(?:null|~)(?:\s|$)/i.test(raw))
+    return null;
+  return raw.replace(/[ \t]+#.*$/, '').trim() || null;
+}
+
 export function parseCliRecord(
   value: unknown,
   context: RecordContext,

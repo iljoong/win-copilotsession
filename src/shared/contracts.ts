@@ -91,7 +91,7 @@ export type SessionFilter = {
   model?: string;
   from?: number;
   to?: number;
-  sort: 'lastActivity' | 'agentTime' | 'credits';
+  sort: 'lastActivity' | 'wallTime' | 'credits';
   offset: number;
   limit: number;
 };
@@ -146,6 +146,7 @@ export type ActivityEntry = {
   observedAt: number;
 };
 export type SessionDetails = {
+  sourceSessionId: string;
   summary: SessionSummary;
   warnings: string[];
   counts: { modelCalls: number; toolCalls: number };

@@ -72,11 +72,15 @@ function filterFrom(url: URL): SessionFilter {
       throw new HttpError(400, 'Invalid query bounds.');
     return value;
   };
-  const sort = params.get('sort') ?? 'lastActivity';
+  const requestedSort = params.get('sort');
+  const sort =
+    requestedSort === 'agentTime'
+      ? 'wallTime'
+      : (requestedSort ?? 'lastActivity');
   const entryOrder = params.get('entryOrder') ?? 'asc';
   const state = params.get('state') || undefined;
   if (
-    !['lastActivity', 'agentTime', 'credits'].includes(sort) ||
+    !['lastActivity', 'wallTime', 'credits'].includes(sort) ||
     !['asc', 'desc'].includes(entryOrder) ||
     (state &&
       ![

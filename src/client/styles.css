@@ -363,6 +363,12 @@ main {
 .state-active {
   color: var(--signal);
 }
+.row-models {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
 .model-badges {
   display: inline-flex;
   flex-wrap: wrap;
@@ -601,6 +607,29 @@ main {
 .todo-node-done {
   stroke: var(--signal);
 }
+.todo-node-running {
+  stroke: #649bff;
+  stroke-width: 2;
+}
+.todo-node-running-trace {
+  fill: none;
+  stroke: #8cdaff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 18 82;
+  animation: todo-running-border 2.8s linear infinite;
+}
+@keyframes todo-running-border {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .todo-node-running-trace {
+    display: none;
+    animation: none;
+  }
+}
 .todo-graph-title {
   color: #e6edf7;
   font-size: 12px;
@@ -626,6 +655,12 @@ main {
   overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 13px;
+}
+.session-identity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  overflow-wrap: anywhere;
 }
 .metrics {
   display: grid;

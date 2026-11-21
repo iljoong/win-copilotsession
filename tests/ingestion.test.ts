@@ -47,6 +47,49 @@ async function enable(path: string) {
     enabled: true,
   });
 }
+test('CLI workspace title updates an indexed session without new events', async () => {
+  const directory = join(root, 'native-session-id');
+  await fs.mkdir(directory);
+  await fs.writeFile(
+    join(directory, 'events.jsonl'),
+    JSON.stringify({
+      id: 'prompt',
+      type: 'user.message',
+      timestamp: '2026-11-12T00:00:00Z',
+      data: { content: 'Original prompt' },
+    }) + '\n',
+  );
+  await ingestion.enableSource({
+    id: 'history',
+    kind: 'cli-history',
+    path: root,
+    enabled: true,
+  });
+  const [before] = store.listSessions(filter).items;
+  expect(before.title).toBe('Original prompt');
+
+  const metadata = join(directory, 'workspace.yaml');
+  await fs.writeFile(metadata, 'name: "Switch tenant: Azure subscription"\n');
+  await ingestion.scanNow();
+  expect(
+    store.listSessions({ ...filter, query: 'Switch tenant' }).items[0],
+  ).toMatchObject({
+    id: before.id,
+    title: 'Switch tenant: Azure subscription',
+    firstAt: before.firstAt,
+    lastAt: before.lastAt,
+    observedAt: before.observedAt,
+  });
+  expect(store.getSession(before.id)?.sourceSessionId).toBe(
+    'native-session-id',
+  );
+  await fs.writeFile(metadata, 'name: Renamed session\n');
+  await ingestion.scanNow();
+  expect(store.getSession(before.id)?.summary.title).toBe('Renamed session');
+  await fs.unlink(metadata);
+  await ingestion.scanNow();
+  expect(store.getSession(before.id)?.summary.title).toBe('Original prompt');
+});
 test('splitUtf8AndPartialLineWaitForCompletion', () => {
   const bytes = Buffer.from('{"text":"😀"}\n');
   const first = readJsonlChunk({

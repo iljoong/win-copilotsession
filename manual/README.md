@@ -129,7 +129,10 @@ The page shows the resolved history path, normally
 `C:\Users\<you>\.copilot\session-state`, honoring `COPILOT_HOME`. Choose **Copilot
 CLI history**, review the path, check read-only consent, and select **Enable
 source**. Existing session folders are indexed and new complete JSONL records
-are polled about once a second. Source files are never modified.
+are polled about once a second. The dashboard reads the session name from
+`workspace.yaml` when available, including renames without new JSONL events.
+Otherwise it shows the first prompt excerpt or the source session ID. Source
+files are never modified.
 
 Select **Todo status** in the selected session to read `id`, `created_at`,
 `updated_at`, `title`, and `status` from that session's `session.db` (`todos`, or
@@ -149,6 +152,8 @@ order. Missing creation times say **Unavailable**, not a guessed time. Graph
 layout is not time or evidence of actual parallel execution. The former
 **Last modification timeline** and **Task details** sections are removed from
 cards; use **All tasks** for the separate full table.
+An `in_progress` graph box has a moving blue border, or a steady blue border
+when reduced motion is enabled.
 
 **Creation to last update** is a recorded span, never execution duration or
 completion time. Equal endpoints say **Same timestamp recorded**. Raw timestamps
@@ -260,8 +265,10 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
   nested editor without clearing filters.
   Above 900 CSS pixels the list and details scroll independently; narrower
   screens use stacked document flow. Title, observed state and freshness warnings
-  stay outside the three detail tabs. **Session Info** contains the eight usage
-  metrics and metadata, retaining partial/unavailable indicators. The old
+  stay outside the three detail tabs. The sidebar shows titles, the first model
+  and any additional model count, and **Wall Time**. **Session Info** includes
+  the title, source session ID and usage metrics, retaining partial/unavailable
+  indicators. The old
   **Data coverage and limitations** disclosure is removed; stored warnings and
   Sources/Usage behavior are unchanged.
 - Pane/filter-expander, selected detail tab and Conversation display settings survive session switching
@@ -288,9 +295,10 @@ transcript. Use CLI history or VS Code chat import for prompt reuse.
 - Model filters select matching **whole sessions**, including their other models.
   Model/source tables are descriptive, not model quality or efficiency rankings.
   Cache and reasoning tokens are subsets, not extra tokens added to input/output.
-  Cache-read share shows its compatible-record denominator.
-- Agent time is the union of measured root invocation intervals. Session wall
-  span includes waiting and is shown separately. No guessed duration fills gaps.
+  **Cache-read share** in **Session Info** uses only compatible records. The
+  Usage page also shows its compatible-record denominator.
+- **Wall Time** is the interval between the earliest and latest source
+  timestamps and includes waiting; it does not measure active agent work.
   Verified parent/child and overlapping-source identities prevent double counts;
   uncertain overlaps prefer CLI history and show a warning.
 

@@ -34,7 +34,7 @@ type DetailTab = (typeof detailTabs)[number]['id'];
 function SessionIcon({
   kind,
 }: {
-  kind: FilterEditor | 'lastActivity' | 'agentTime' | 'credits';
+  kind: FilterEditor | 'lastActivity' | 'wallTime' | 'credits';
 }) {
   const paths = {
     source: 'M9 5 3 12l6 7m6-14 6 7-6 7',
@@ -42,7 +42,7 @@ function SessionIcon({
     model: 'M6 6h12v12H6zM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4',
     date: 'M3 5h18v16H3zM7 2v6m10-6v6M3 11h18',
     lastActivity: 'M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0m9-6v6l4 2',
-    agentTime: 'M7 3h10M7 21h10M8 3v4l8 10v4M16 3v4L8 17v4',
+    wallTime: 'M7 3h10M7 21h10M8 3v4l8 10v4M16 3v4L8 17v4',
     credits:
       'M3 12a9 9 0 1 0 18 0 9 9 0 1 0-18 0m12-4h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9m3-10v12',
   };
@@ -186,7 +186,10 @@ export function SessionsPage({
   const [model, setModel] = useState(initial.get('model') ?? '');
   const [from, setFrom] = useState(initial.get('from') ?? '');
   const [to, setTo] = useState(initial.get('to') ?? '');
-  const [sort, setSort] = useState(initial.get('sort') ?? 'lastActivity');
+  const initialSort = initial.get('sort');
+  const [sort, setSort] = useState(
+    initialSort === 'agentTime' ? 'wallTime' : (initialSort ?? 'lastActivity'),
+  );
   const [offset, setOffset] = useState(0);
   const [selected, setSelected] = useState(initial.get('session') ?? '');
   const [entryOffset, setEntryOffset] = useState(0);
@@ -555,7 +558,7 @@ export function SessionsPage({
         {(
           [
             ['lastActivity', 'Latest activity'],
-            ['agentTime', 'Recorded agent time'],
+            ['wallTime', 'Wall Time'],
             ['credits', 'Reported AIC'],
           ] as const
         ).map(([value, label]) => (
@@ -684,13 +687,14 @@ export function SessionsPage({
                   </span>
                 </span>
                 <span className="row-meta">
-                  <span>
-                    {item.models.length > 1 ? (
-                      'Multiple models'
-                    ) : item.models.length ? (
-                      <ModelBadges models={item.models} />
+                  <span className="row-models">
+                    {item.models.length ? (
+                      <ModelBadges models={item.models.slice(0, 1)} />
                     ) : (
                       'Model unavailable'
+                    )}
+                    {item.models.length > 1 && (
+                      <span>+{item.models.length - 1}</span>
                     )}
                   </span>
                   <span>
@@ -699,7 +703,7 @@ export function SessionsPage({
                   </span>
                 </span>
                 <span className="row-meta">
-                  <span>{duration(item.usage.agentMs)} agent time</span>
+                  <span>Wall Time: {duration(item.usage.wallMs)}</span>
                   <time>{stamp(item.lastAt)}</time>
                 </span>
               </button>
@@ -842,6 +846,16 @@ export function SessionsPage({
               >
                 <div className="detail-heading">
                   <h3>Session information</h3>
+                  <dl className="session-identity">
+                    <div>
+                      <dt>Session title</dt>
+                      <dd>{summary.title}</dd>
+                    </div>
+                    <div>
+                      <dt>Session ID</dt>
+                      <dd>{detail.sourceSessionId}</dd>
+                    </div>
+                  </dl>
                   <p>
                     Models: <ModelBadges models={summary.models} />
                   </p>
@@ -875,8 +889,12 @@ export function SessionsPage({
                     </div>
                   ))}
                   <div>
-                    <dt>Recorded agent time</dt>
-                    <dd>{duration(summary.usage.agentMs)}</dd>
+                    <dt>Cache-read share</dt>
+                    <dd aria-label="Cache-read share">
+                      {summary.usage.cacheShare === null
+                        ? 'Unavailable'
+                        : `${quantity(summary.usage.cacheShare * 100)}%`}
+                    </dd>
                   </div>
                   <div>
                     <dt>Wall span</dt>

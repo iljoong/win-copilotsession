@@ -43,6 +43,84 @@ async function enableSource(
   await page.getByRole('button', { name: 'Sessions', exact: true }).click();
   await expect(page.getByText('Live updates connected')).toBeVisible();
 }
+test('session sidebar and info show the native title, first model and wall time', async ({
+  page,
+  app,
+}) => {
+  const history = join(dirname(app.telemetryPath), 'title-history');
+  const directory = join(history, 'synthetic-native-id');
+  await mkdir(directory, { recursive: true });
+  await writeFile(
+    join(directory, 'workspace.yaml'),
+    'name: Switch Azure tenant\n',
+  );
+  await writeFile(
+    join(directory, 'events.jsonl'),
+    [
+      { type: 'user.message', data: { content: 'Original prompt' } },
+      { type: 'assistant.turn_start', data: { turnId: 'first-turn' } },
+      { type: 'session.model_change', data: { newModel: 'gpt-first' } },
+      { type: 'session.model_change', data: { newModel: 'claude-second' } },
+      {
+        type: 'session.usage_record',
+        data: {
+          usage: {
+            model: 'claude-second',
+            inputTokens: 200,
+            cacheReadTokens: 50,
+          },
+        },
+      },
+    ]
+      .map((event, index) =>
+        JSON.stringify({
+          ...event,
+          id: `event-${index}`,
+          timestamp: `2026-11-17T01:00:0${index}Z`,
+        }),
+      )
+      .join('\n') + '\n',
+  );
+  const newer = join(history, 'newer-session');
+  await mkdir(newer);
+  await writeFile(
+    join(newer, 'events.jsonl'),
+    JSON.stringify({
+      id: 'newer-prompt',
+      type: 'user.message',
+      timestamp: '2026-11-17T02:00:00Z',
+      data: { content: 'Newer session' },
+    }) + '\n',
+  );
+  await page.goto(app.origin);
+  await enableSource(page, history, 'cli-history');
+  const row = page.getByRole('button', { name: 'Open Switch Azure tenant' });
+  await expect(
+    row.getByText('Active (observed)', { exact: true }),
+  ).toBeVisible();
+  await expect(row.getByText('gpt-first', { exact: true })).toBeVisible();
+  await expect(row.getByText('+1', { exact: true })).toBeVisible();
+  await expect(row.getByText('Wall Time: 4.0s')).toBeVisible();
+  const rows = page.getByRole('button', { name: /^Open / });
+  await expect(rows.first()).toHaveAccessibleName('Open Newer session');
+  await page.getByText('Search and filters', { exact: true }).click();
+  await page.getByRole('button', { name: 'Wall Time', exact: true }).click();
+  await expect(rows.first()).toHaveAccessibleName('Open Switch Azure tenant');
+  await row.click();
+  await page.getByRole('tab', { name: 'Session Info' }).click();
+  const info = page.getByRole('tabpanel', { name: 'Session Info' });
+  await expect(
+    info.getByText('Switch Azure tenant', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    info.getByText('synthetic-native-id', { exact: true }),
+  ).toBeVisible();
+  await expect(info.getByLabel('Cache-read share')).toHaveText('25%');
+  await expect(info.getByText('Recorded agent time')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Open Newer session' }).click();
+  await expect(info.getByLabel('Cache-read share')).toHaveText('Unavailable');
+});
+
 test('todoStatusTabShowsCompletionAndNewestRowsAndRefreshesWithoutEvents', async ({
   page,
   app,
@@ -102,6 +180,15 @@ test('todoStatusTabShowsCompletionAndNewestRowsAndRefreshesWithoutEvents', async
       name: 'Dependency graph for Synthetic TODO',
     });
     await expect(graph).toBeVisible();
+    const running = graph.locator('g').filter({
+      has: page.getByText('in_progress', { exact: true }),
+    });
+    const animationCount = () =>
+      running.evaluate((box) => box.getAnimations({ subtree: true }).length);
+    await expect.poll(animationCount).toBeGreaterThan(0);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await expect.poll(animationCount).toBe(0);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
     const positions = await graph
       .locator('g')
       .evaluateAll((nodes) =>

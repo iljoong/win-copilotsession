@@ -25,6 +25,11 @@ export interface Store {
     batch: NormalizedBatch,
     checkpoint?: { sourceId: string; value: string },
   ): StoreChange;
+  setCliWorkspaceTitle(
+    sourceId: string,
+    sessionRef: string,
+    title: string | null,
+  ): StoreChange;
   getCheckpoint(sourceId: string): string | null;
   listSessions(filter: SessionFilter): Page<SessionSummary>;
   getSession(id: string): SessionDetails | null;
@@ -52,7 +57,7 @@ export interface Store {
   close(): void;
 }
 
-function canonical(record: NormalizedRecord) {
+function canonical(record: Pick<NormalizedRecord, 'namespace' | 'sessionRef'>) {
   return `s-${createHash('sha256').update(`${record.namespace}\0${record.sessionRef}`).digest('hex').slice(0, 40)}`;
 }
 function paginate<T>(items: T[], offset: number, limit: number): Page<T> {
@@ -133,14 +138,21 @@ export function openStore(dbPath: string): Store {
     const original = rows.find(
       (row) => row.kind === 'entry' && row.role === 'original-user',
     );
+    const workspace = db
+      .prepare(
+        'SELECT title FROM cli_workspace_titles WHERE session_id=? ORDER BY source_id LIMIT 1',
+      )
+      .get(id);
     const title =
+      (workspace?.title as string | undefined) ??
       sessionRows
         .map((row) => row.title)
         .filter(Boolean)
         .at(-1) ??
-      (original?.kind === 'entry'
-        ? Array.from(original.text).slice(0, 90).join('')
-        : (rows[0]?.sessionRef ?? 'Untitled session'));
+      ((original?.kind === 'entry' &&
+        Array.from(original.text.trim()).slice(0, 90).join('')) ||
+        rows[0]?.sessionRef ||
+        'Untitled session');
     const times = rows.flatMap((row) =>
       row.timestamp === null ? [] : [row.timestamp],
     );
@@ -242,8 +254,8 @@ export function openStore(dbPath: string): Store {
     const value = (row: SessionSummary) =>
       filter.sort === 'credits'
         ? row.usage.aic
-        : filter.sort === 'agentTime'
-          ? row.usage.agentMs
+        : filter.sort === 'wallTime'
+          ? row.usage.wallMs
           : row.lastAt;
     return rows.sort(
       (a, b) => (value(b) ?? -1) - (value(a) ?? -1) || a.id.localeCompare(b.id),
@@ -341,6 +353,45 @@ export function openStore(dbPath: string): Store {
       }
       return { sessionIds: [...sessions], sourceIds: [...sources] };
     },
+    setCliWorkspaceTitle(sourceId, sessionRef, title) {
+      const id = canonical({ namespace: 'cli', sessionRef });
+      const existing = db
+        .prepare(
+          'SELECT title FROM cli_workspace_titles WHERE session_id=? AND source_id=?',
+        )
+        .get(id, sourceId);
+      if ((existing?.title ?? null) === title)
+        return { sessionIds: [], sourceIds: [] };
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        const result =
+          title === null
+            ? db
+                .prepare(
+                  'DELETE FROM cli_workspace_titles WHERE session_id=? AND source_id=?',
+                )
+                .run(id, sourceId)
+            : db
+                .prepare(
+                  `
+              INSERT INTO cli_workspace_titles(session_id, source_id, title)
+              SELECT session_id, source_id, ? FROM source_links
+              WHERE session_id=? AND source_id=?
+              ON CONFLICT(session_id, source_id) DO UPDATE SET title=excluded.title
+              WHERE title != excluded.title
+            `,
+                )
+                .run(title, id, sourceId);
+        if (result.changes) refresh(id);
+        db.exec('COMMIT');
+        return result.changes
+          ? { sessionIds: [id], sourceIds: [sourceId] }
+          : { sessionIds: [], sourceIds: [] };
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+    },
     getCheckpoint(sourceId) {
       const row = db
         .prepare('SELECT value FROM checkpoints WHERE source_id=?')
@@ -353,11 +404,13 @@ export function openStore(dbPath: string): Store {
     getSession(id) {
       const row = db.prepare('SELECT summary FROM sessions WHERE id=?').get(id);
       if (!row) return null;
-      const activity = records(id).filter(
+      const sessionRecords = records(id);
+      const activity = sessionRecords.filter(
         (record) => record.kind === 'activity',
       );
       return {
         summary: parse<SessionSummary>(row.summary),
+        sourceSessionId: sessionRecords[0]?.sessionRef ?? id,
         warnings: sessionWarnings(id),
         counts: {
           modelCalls: activity.filter(

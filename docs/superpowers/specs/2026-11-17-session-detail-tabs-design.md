@@ -10,6 +10,20 @@ The [dependency-group follow-up](2026-11-17-todo-groups-design.md) extends
 Todo status with a default grouped view; this document's flat ordering remains
 available under All tasks.
 
+## 2026-11-21 display follow-up
+
+- In enabled CLI history, read only the session `name` from each indexed
+  session's local `workspace.yaml`. A rename updates display and search
+  without becoming a new activity record. Otherwise retain the existing title
+  fallbacks. Do not modify source files or expand the configured source root.
+- Keep the title separate from the state badge. In the sidebar show the first
+  model and the number of other models, plus observed Wall Time. Offer a Wall
+  Time sort in place of Recorded agent time. Session Info also shows the title,
+  native source session ID, and compatible-record cache-read percentage
+  (`Unavailable` when unknown). Do not display Recorded agent time on Usage.
+- In Todo status dependencies, give exact `in_progress` nodes a rotating blue
+  outline highlight, with a steady blue outline for reduced motion.
+
 ## Observable behavior
 
 - Replace the selected-session overview and TODO expanders with three tabs, in
